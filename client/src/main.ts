@@ -199,6 +199,14 @@ class MurmurationGame {
         case 'F':
           this.toggleFullscreen();
           break;
+        case 'c':
+        case 'C':
+          this.gameScene.cycleCameraMode();
+          break;
+        case 'v':
+        case 'V':
+          this.gameScene.frameAllBirds();
+          break;
       }
     });
   }
@@ -247,8 +255,10 @@ function initializeGame(): void {
         <div>F: Toggle Fullscreen</div>
         <br>
         <div><strong>Camera:</strong></div>
-        <div>Arrow Keys / WASD: Move</div>
+        <div>Arrow Keys / WASD: Move (Manual Mode)</div>
         <div>Mouse Wheel: Zoom</div>
+        <div>C: Cycle Camera Mode</div>
+        <div>V: Frame All Birds</div>
         <div>Space: Pause/Resume</div>
         <br>
         <div><strong>Beacons:</strong></div>

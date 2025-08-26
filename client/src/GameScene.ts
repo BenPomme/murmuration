@@ -60,7 +60,8 @@ export class GameScene extends Scene {
   private gameState: GameState | null = null;
   private agentSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private beaconSprites: Map<string, Phaser.GameObjects.Container> = new Map();
-  private hazardSprites: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  private hazardSprites: Map<string, Phaser.GameObjects.Container> = new Map();
+  private hazardParticles: Map<string, Phaser.GameObjects.Particles.ParticleEmitter> = new Map();
   private destinationSprite: Phaser.GameObjects.Graphics | null = null;
   
   // UI elements
@@ -79,6 +80,13 @@ export class GameScene extends Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private cameraSpeed = 300;
   private zoomSpeed = 0.1;
+  
+  // Enhanced camera system
+  private cameraMode: 'manual' | 'flock_follow' | 'frame_all' = 'manual';
+  private flockCentroid = { x: 0, y: 0 };
+  private flockVelocity = { x: 0, y: 0 };
+  private cameraTargetPos = { x: 0, y: 0 };
+  private cameraFollowSmoothness = 0.05;
   
   // World bounds (matching Python simulation)
   private worldWidth = 2000;
@@ -104,7 +112,31 @@ export class GameScene extends Scene {
       console.warn('Environment assets not loaded:', error);
     }
     
-    // Skip complex asset loading for now - use procedural graphics
+    // Create procedural particle textures
+    this.createParticleTextures();
+  }
+
+  private createParticleTextures() {
+    // Create debris particle texture (small brown squares for tornado debris)
+    const debrisGraphics = this.add.graphics();
+    debrisGraphics.fillStyle(0x996633, 1);
+    debrisGraphics.fillRect(0, 0, 4, 4);
+    debrisGraphics.generateTexture('debris', 4, 4);
+    debrisGraphics.destroy();
+    
+    // Create shadow particle texture (soft dark circles for predator shadows)
+    const shadowGraphics = this.add.graphics();
+    shadowGraphics.fillStyle(0x000000, 0.6);
+    shadowGraphics.fillCircle(4, 4, 3);
+    shadowGraphics.generateTexture('shadow', 8, 8);
+    shadowGraphics.destroy();
+    
+    // Create spark particle texture (bright small circles for warning effects)
+    const sparkGraphics = this.add.graphics();
+    sparkGraphics.fillStyle(0xffffff, 1);
+    sparkGraphics.fillCircle(2, 2, 1.5);
+    sparkGraphics.generateTexture('spark', 4, 4);
+    sparkGraphics.destroy();
   }
 
   create() {
@@ -206,7 +238,56 @@ export class GameScene extends Scene {
   }
 
   update() {
-    // Camera movement
+    // Enhanced camera system
+    this.updateCameraSystem();
+  }
+
+  private updateCameraSystem() {
+    const camera = this.cameras.main;
+    
+    // Calculate flock metrics if we have agents
+    if (this.gameState?.agents && this.gameState.agents.length > 0) {
+      this.calculateFlockMetrics();
+    }
+    
+    // Handle camera modes
+    switch (this.cameraMode) {
+      case 'manual':
+        this.handleManualCamera();
+        break;
+      case 'flock_follow':
+        this.handleFlockFollowCamera();
+        break;
+      case 'frame_all':
+        this.handleFrameAllCamera();
+        break;
+    }
+  }
+
+  private calculateFlockMetrics() {
+    if (!this.gameState?.agents) return;
+    
+    const aliveAgents = this.gameState.agents.filter(a => a.alive);
+    if (aliveAgents.length === 0) return;
+    
+    // Calculate centroid (center of mass)
+    let totalX = 0, totalY = 0, totalVx = 0, totalVy = 0;
+    
+    for (const agent of aliveAgents) {
+      totalX += agent.x;
+      totalY += agent.y;
+      totalVx += agent.vx || 0;
+      totalVy += agent.vy || 0;
+    }
+    
+    this.flockCentroid.x = totalX / aliveAgents.length;
+    this.flockCentroid.y = totalY / aliveAgents.length;
+    this.flockVelocity.x = totalVx / aliveAgents.length;
+    this.flockVelocity.y = totalVy / aliveAgents.length;
+  }
+
+  private handleManualCamera() {
+    // Traditional manual camera controls
     const camera = this.cameras.main;
     const speed = this.cameraSpeed * (1 / camera.zoom);
     
@@ -221,6 +302,135 @@ export class GameScene extends Scene {
     }
     if (this.cursors.down?.isDown || this.cursors.S?.isDown) {
       camera.scrollY += speed * 0.016;
+    }
+  }
+
+  private handleFlockFollowCamera() {
+    // Predictive smooth following of flock centroid
+    const camera = this.cameras.main;
+    
+    // Predict where the flock will be (looking ahead based on velocity)
+    const predictionTime = 2.0; // seconds
+    this.cameraTargetPos.x = this.flockCentroid.x + (this.flockVelocity.x * predictionTime);
+    this.cameraTargetPos.y = this.flockCentroid.y + (this.flockVelocity.y * predictionTime);
+    
+    // Smoothly interpolate camera position
+    const targetScrollX = this.cameraTargetPos.x - camera.width / 2 / camera.zoom;
+    const targetScrollY = this.cameraTargetPos.y - camera.height / 2 / camera.zoom;
+    
+    camera.scrollX += (targetScrollX - camera.scrollX) * this.cameraFollowSmoothness;
+    camera.scrollY += (targetScrollY - camera.scrollY) * this.cameraFollowSmoothness;
+    
+    // Keep camera within world bounds
+    camera.scrollX = Phaser.Math.Clamp(camera.scrollX, 0, this.worldWidth - camera.width / camera.zoom);
+    camera.scrollY = Phaser.Math.Clamp(camera.scrollY, 0, this.worldHeight - camera.height / camera.zoom);
+  }
+
+  private handleFrameAllCamera() {
+    // Automatically zoom and position to fit all alive birds
+    if (!this.gameState?.agents) return;
+    
+    const camera = this.cameras.main;
+    const aliveAgents = this.gameState.agents.filter(a => a.alive);
+    if (aliveAgents.length === 0) return;
+    
+    // Find bounding box of all alive agents
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    
+    for (const agent of aliveAgents) {
+      minX = Math.min(minX, agent.x);
+      maxX = Math.max(maxX, agent.x);
+      minY = Math.min(minY, agent.y);
+      maxY = Math.max(maxY, agent.y);
+    }
+    
+    // Add padding around the flock
+    const padding = 100;
+    minX -= padding;
+    maxX += padding;
+    minY -= padding;
+    maxY += padding;
+    
+    // Calculate required zoom and position
+    const flockWidth = maxX - minX;
+    const flockHeight = maxY - minY;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    
+    // Calculate zoom to fit all birds (with some margin)
+    const zoomX = camera.width / flockWidth;
+    const zoomY = camera.height / flockHeight;
+    const targetZoom = Math.min(zoomX, zoomY, 2.0); // Cap max zoom
+    
+    // Smoothly adjust zoom and position
+    camera.zoom += (targetZoom - camera.zoom) * 0.02;
+    
+    const targetScrollX = centerX - camera.width / 2 / camera.zoom;
+    const targetScrollY = centerY - camera.height / 2 / camera.zoom;
+    
+    camera.scrollX += (targetScrollX - camera.scrollX) * 0.05;
+    camera.scrollY += (targetScrollY - camera.scrollY) * 0.05;
+  }
+
+  public cycleCameraMode() {
+    // Cycle through camera modes
+    const modes: Array<'manual' | 'flock_follow' | 'frame_all'> = ['manual', 'flock_follow', 'frame_all'];
+    const currentIndex = modes.indexOf(this.cameraMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    this.cameraMode = modes[nextIndex];
+    
+    // Show camera mode indicator
+    const modeNames = {
+      manual: 'Manual Camera',
+      flock_follow: 'Follow Flock',
+      frame_all: 'Frame All Birds'
+    };
+    
+    // Create temporary indicator text
+    if (this.connectionText) {
+      const indicator = this.add.text(this.connectionText.x, this.connectionText.y + 25, 
+        `Camera: ${modeNames[this.cameraMode]}`, {
+        fontSize: '12px',
+        color: '#00ff88',
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        padding: { x: 8, y: 4 }
+      }).setScrollFactor(0).setDepth(100);
+      
+      // Fade out after 2 seconds
+      this.tweens.add({
+        targets: indicator,
+        alpha: 0,
+        duration: 2000,
+        onComplete: () => indicator.destroy()
+      });
+    }
+    
+    console.log(`🎮 Camera mode changed to: ${modeNames[this.cameraMode]}`);
+  }
+
+  public frameAllBirds() {
+    // Temporarily switch to frame_all mode for one-time framing
+    if (this.gameState?.agents && this.gameState.agents.length > 0) {
+      this.handleFrameAllCamera();
+      
+      // Show frame indicator
+      if (this.connectionText) {
+        const indicator = this.add.text(this.connectionText.x, this.connectionText.y + 25, 
+          'Framing All Birds', {
+          fontSize: '12px',
+          color: '#ffaa00',
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          padding: { x: 8, y: 4 }
+        }).setScrollFactor(0).setDepth(100);
+        
+        this.tweens.add({
+          targets: indicator,
+          alpha: 0,
+          duration: 1500,
+          onComplete: () => indicator.destroy()
+        });
+      }
     }
   }
 
@@ -414,47 +624,42 @@ export class GameScene extends Scene {
     if (!this.gameState?.hazards) return;
     
     // Remove hazards that no longer exist
-    for (const [hazardId, graphics] of this.hazardSprites.entries()) {
+    for (const [hazardId, container] of this.hazardSprites.entries()) {
       if (!this.gameState.hazards.find(h => h.id === hazardId)) {
-        graphics.destroy();
+        // Clean up particle emitter
+        const particles = this.hazardParticles.get(hazardId);
+        if (particles) {
+          particles.destroy();
+          this.hazardParticles.delete(hazardId);
+        }
+        container.destroy();
         this.hazardSprites.delete(hazardId);
       }
     }
     
-    // Update or create hazard sprites
+    // Update or create hazard sprites with particle effects
     for (const hazard of this.gameState.hazards) {
       const hazardId = `${hazard.type}_${hazard.x || hazard.position?.[0] || 0}_${hazard.y || hazard.position?.[1] || 0}`;
-      let graphics = this.hazardSprites.get(hazardId);
-      
-      if (!graphics) {
-        graphics = this.add.graphics();
-        this.hazardSprites.set(hazardId, graphics);
-      }
-      
-      graphics.clear();
+      let container = this.hazardSprites.get(hazardId);
       
       // Get position from either x,y or position array
       const x = hazard.x ?? hazard.position?.[0] ?? 0;
       const y = hazard.y ?? hazard.position?.[1] ?? 0;
       const radius = hazard.radius ?? 50;
       
-      // Different visual styles for different hazards
-      if (hazard.type.toLowerCase().includes('tornado')) {
-        // Red spiral for tornado
-        graphics.lineStyle(3, 0xff0000, 0.8);
-        graphics.strokeCircle(x, y, radius);
-        graphics.lineStyle(2, 0xffaa00, 0.6);
-        graphics.strokeCircle(x, y, radius * 0.7);
-      } else if (hazard.type.toLowerCase().includes('predator')) {
-        // Dark red circle for predator
-        graphics.fillStyle(0x990000, 0.5);
-        graphics.fillCircle(x, y, radius);
-        graphics.lineStyle(2, 0xff0000, 0.8);
-        graphics.strokeCircle(x, y, radius);
+      if (!container) {
+        // Create new hazard with particle effects
+        container = this.createHazardWithParticles(hazard.type, x, y, radius);
+        this.hazardSprites.set(hazardId, container);
       } else {
-        // Generic hazard
-        graphics.fillStyle(0xff4444, 0.3);
-        graphics.fillCircle(x, y, radius);
+        // Update existing hazard position
+        container.setPosition(x, y);
+        
+        // Update particle emitter position
+        const particles = this.hazardParticles.get(hazardId);
+        if (particles) {
+          particles.setPosition(x, y);
+        }
       }
     }
   }
@@ -872,7 +1077,27 @@ export class GameScene extends Scene {
       ease: 'Sine.easeInOut'
     });
     
-    birdContainer.add([glow, bird]);
+    // Create motion trail particles (subtle, only for some birds to avoid performance issues)
+    let trailEmitter = null;
+    if (Math.random() < 0.3) { // Only 30% of birds get trails
+      trailEmitter = this.add.particles(0, 0, 'spark', {
+        x: 0,
+        y: 0,
+        lifespan: 200,
+        speed: 0,
+        scale: { start: 0.03, end: 0.01 },
+        alpha: { start: 0.4, end: 0 },
+        tint: 0xffffff,
+        quantity: 1,
+        frequency: 150,
+        blendMode: 'ADD'
+      });
+      trailEmitter.setDepth(LAYER_DEPTHS.AGENTS - 1);
+      birdContainer.add([glow, bird, trailEmitter]);
+    } else {
+      birdContainer.add([glow, bird]);
+    }
+    
     birdContainer.setDepth(LAYER_DEPTHS.AGENTS);
     
     return birdContainer;
@@ -905,5 +1130,111 @@ export class GameScene extends Scene {
       glow.fillCircle(0, 0, 8);
       glow.setBlendMode(Phaser.BlendModes.ADD);
     }
+  }
+
+  private createHazardWithParticles(type: string, x: number, y: number, radius: number): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y);
+    const hazardId = `${type}_${x}_${y}`;
+    
+    // Create base graphics for hazard
+    const graphics = this.add.graphics();
+    
+    if (type.toLowerCase().includes('tornado')) {
+      // Tornado spiral graphics
+      graphics.lineStyle(3, 0xff0000, 0.8);
+      graphics.strokeCircle(0, 0, radius);
+      graphics.lineStyle(2, 0xffaa00, 0.6);
+      graphics.strokeCircle(0, 0, radius * 0.7);
+      graphics.lineStyle(1, 0xff6600, 0.4);
+      graphics.strokeCircle(0, 0, radius * 0.4);
+      
+      // Create tornado spiral particle system
+      const debrisEmitter = this.add.particles(0, 0, 'debris', {
+        x: 0,
+        y: 0,
+        lifespan: { min: 1000, max: 3000 },
+        speed: { min: 30, max: 80 },
+        scale: { start: 0.1, end: 0.3 },
+        alpha: { start: 0.8, end: 0 },
+        tint: [0xcc6600, 0x996600, 0x663300],
+        quantity: 2,
+        frequency: 100,
+        emitZone: {
+          type: 'edge',
+          source: new Phaser.Geom.Circle(0, 0, radius * 0.8),
+          quantity: 8
+        }
+      });
+      
+      // Add spiral motion to particles
+      debrisEmitter.addDeathZone({
+        type: 'onEnter',
+        source: new Phaser.Geom.Circle(0, 0, radius + 20)
+      });
+      
+      // Rotate particles around tornado center
+      debrisEmitter.onParticleEmit((particle: any) => {
+        const angle = Phaser.Math.Angle.Between(0, 0, particle.x, particle.y);
+        particle.velocityX = Math.cos(angle + Math.PI/2) * 50;
+        particle.velocityY = Math.sin(angle + Math.PI/2) * 50;
+      });
+      
+      this.hazardParticles.set(hazardId, debrisEmitter);
+      container.add([graphics, debrisEmitter]);
+      
+    } else if (type.toLowerCase().includes('predator')) {
+      // Predator dark circle
+      graphics.fillStyle(0x990000, 0.5);
+      graphics.fillCircle(0, 0, radius);
+      graphics.lineStyle(2, 0xff0000, 0.8);
+      graphics.strokeCircle(0, 0, radius);
+      
+      // Add predator shadow/motion blur effect
+      const shadowEmitter = this.add.particles(0, 0, 'shadow', {
+        x: 0,
+        y: 0,
+        lifespan: 800,
+        speed: { min: 10, max: 30 },
+        scale: { start: 0.8, end: 1.2 },
+        alpha: { start: 0.6, end: 0 },
+        tint: 0x330000,
+        quantity: 1,
+        frequency: 200,
+        blendMode: 'MULTIPLY'
+      });
+      
+      this.hazardParticles.set(hazardId, shadowEmitter);
+      container.add([graphics, shadowEmitter]);
+      
+    } else {
+      // Generic hazard
+      graphics.fillStyle(0xff4444, 0.3);
+      graphics.fillCircle(0, 0, radius);
+      graphics.lineStyle(1, 0xff0000, 0.5);
+      graphics.strokeCircle(0, 0, radius);
+      
+      // Simple warning particles
+      const warningEmitter = this.add.particles(0, 0, 'spark', {
+        x: 0,
+        y: 0,
+        lifespan: 1500,
+        speed: { min: 20, max: 50 },
+        scale: { start: 0.2, end: 0.05 },
+        alpha: { start: 1, end: 0 },
+        tint: 0xff4444,
+        quantity: 1,
+        frequency: 300,
+        emitZone: {
+          type: 'random',
+          source: new Phaser.Geom.Circle(0, 0, radius * 0.5)
+        }
+      });
+      
+      this.hazardParticles.set(hazardId, warningEmitter);
+      container.add([graphics, warningEmitter]);
+    }
+    
+    container.setDepth(LAYER_DEPTHS.HAZARDS);
+    return container;
   }
 }
