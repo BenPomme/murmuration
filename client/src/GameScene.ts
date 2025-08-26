@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { audioManager } from './AudioManager';
+import { LAYER_DEPTHS } from './config/gameConfig';
 
 interface Agent {
   id: number;
