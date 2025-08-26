@@ -58,7 +58,7 @@ interface GameState {
 
 export class GameScene extends Scene {
   private gameState: GameState | null = null;
-  private agentSprites: Map<string, Phaser.GameObjects.Arc> = new Map();
+  private agentSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private beaconSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private hazardSprites: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private destinationSprite: Phaser.GameObjects.Graphics | null = null;
@@ -269,9 +269,8 @@ export class GameScene extends Scene {
       let sprite = this.agentSprites.get(agentId);
       
       if (!sprite) {
-        // Create new agent sprite with bird texture
-        sprite = this.add.circle(agent.x, agent.y, 4, 0xffffff);
-        // TODO: Replace with actual bird sprite when animation system is ready
+        // Create luminous bird glyph sprite
+        sprite = this.createLuminousBirdSprite(agent.x, agent.y);
         this.agentSprites.set(agentId, sprite);
       }
       
@@ -290,7 +289,8 @@ export class GameScene extends Scene {
         targetColor = 0x44ff44; // Green for high energy
       }
       
-      sprite.setFillStyle(targetColor);
+      // Update bird sprite color with luminous effect
+      this.updateBirdSpriteColor(sprite, targetColor);
       
       // Scale based on energy with animation
       const targetScale = agent.alive ? Math.max(0.6, agent.energy / 100 * 1.2) : 0.3;
@@ -834,6 +834,76 @@ export class GameScene extends Scene {
       // Try to initialize if not already done
       this.initializeSoundtrack();
       audioManager.playButtonClick();
+    }
+  }
+
+  private createLuminousBirdSprite(x: number, y: number): Phaser.GameObjects.Container {
+    // Create a container for the bird sprite with glow effect
+    const birdContainer = this.add.container(x, y);
+    
+    // Create glow effect (larger, semi-transparent background)
+    const glow = this.add.graphics();
+    glow.fillStyle(0xffffff, 0.3);
+    glow.fillCircle(0, 0, 8); // Glow radius
+    glow.setBlendMode(Phaser.BlendModes.ADD); // Additive blending for glow
+    
+    // Create bird shape (luminous glyph)
+    const bird = this.add.graphics();
+    bird.lineStyle(1, 0xffffff, 0.8);
+    bird.fillStyle(0xffffff, 0.9);
+    
+    // Draw a simple bird glyph shape (triangle with wings)
+    bird.beginPath();
+    bird.moveTo(-3, 2);  // Left wing tip
+    bird.lineTo(0, -4);  // Head/beak
+    bird.lineTo(3, 2);   // Right wing tip  
+    bird.lineTo(0, 1);   // Body center
+    bird.closePath();
+    bird.fillPath();
+    bird.strokePath();
+    
+    // Add subtle pulsing animation
+    this.tweens.add({
+      targets: glow,
+      alpha: 0.2,
+      duration: 1000 + Math.random() * 500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+    
+    birdContainer.add([glow, bird]);
+    birdContainer.setDepth(LAYER_DEPTHS.AGENTS);
+    
+    return birdContainer;
+  }
+
+  private updateBirdSpriteColor(container: Phaser.GameObjects.Container, color: number) {
+    // Get the bird graphics (second child, first is glow)
+    const bird = container.list[1] as Phaser.GameObjects.Graphics;
+    const glow = container.list[0] as Phaser.GameObjects.Graphics;
+    
+    if (bird && glow) {
+      // Clear and redraw bird with new color
+      bird.clear();
+      bird.lineStyle(1, color, 0.8);
+      bird.fillStyle(color, 0.9);
+      
+      // Draw bird shape
+      bird.beginPath();
+      bird.moveTo(-3, 2);
+      bird.lineTo(0, -4);
+      bird.lineTo(3, 2);
+      bird.lineTo(0, 1);
+      bird.closePath();
+      bird.fillPath();
+      bird.strokePath();
+      
+      // Update glow color
+      glow.clear();
+      glow.fillStyle(color, 0.3);
+      glow.fillCircle(0, 0, 8);
+      glow.setBlendMode(Phaser.BlendModes.ADD);
     }
   }
 }

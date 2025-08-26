@@ -14,17 +14,29 @@ class MurmurationGame {
     // Initialize Phaser game
     this.gameScene = new GameScene();
     
+    // Calculate optimal dimensions for current screen
+    const dimensions = this.calculateGameDimensions();
+    
     const gameConfig: Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: 1280,
-      height: 720,
+      width: dimensions.width,
+      height: dimensions.height,
       parent: 'game-container',
       backgroundColor: '#87CEEB',
+      resolution: window.devicePixelRatio || 1, // High-DPI support
       scale: {
-        mode: Phaser.Scale.SHOW_ALL,
+        mode: Phaser.Scale.RESIZE, // Dynamic resize instead of fixed
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: 1280,
-        height: 720
+        width: dimensions.width,
+        height: dimensions.height,
+        min: {
+          width: 800,
+          height: 450
+        },
+        max: {
+          width: dimensions.maxWidth,
+          height: dimensions.maxHeight
+        }
       },
       physics: {
         default: 'arcade',
@@ -37,11 +49,82 @@ class MurmurationGame {
 
     this.game = new Game(gameConfig);
     
+    // Set up resize handling for responsive design
+    this.setupResizeHandling();
+    
     // Wait for game to be ready before setting up scene event handlers
     this.game.events.once('ready', () => {
       this.setupEventHandlers();
       this.connectToServer();
     });
+  }
+
+  private calculateGameDimensions() {
+    // Get available screen space (accounting for browser UI)
+    const availableWidth = window.innerWidth;
+    const availableHeight = window.innerHeight;
+    
+    // Target aspect ratio (16:9 to match common displays and game world 2000x1200 ≈ 1.67:1)
+    const targetAspect = 16 / 9;
+    
+    // Calculate dimensions that fit within available space while maintaining aspect ratio
+    let width = availableWidth;
+    let height = availableWidth / targetAspect;
+    
+    // If height exceeds available space, constrain by height instead
+    if (height > availableHeight) {
+      height = availableHeight;
+      width = availableHeight * targetAspect;
+    }
+    
+    // Ensure minimum viable size
+    const minWidth = 800;
+    const minHeight = 450;
+    
+    width = Math.max(width, minWidth);
+    height = Math.max(height, minHeight);
+    
+    // Set reasonable maximums to prevent performance issues
+    const maxWidth = Math.min(availableWidth, 2560); // 2K max width
+    const maxHeight = Math.min(availableHeight, 1440); // 2K max height
+    
+    return {
+      width: Math.round(width),
+      height: Math.round(height),
+      maxWidth: Math.round(maxWidth),
+      maxHeight: Math.round(maxHeight)
+    };
+  }
+
+  private setupResizeHandling() {
+    // Handle window resize events
+    const handleResize = () => {
+      const dimensions = this.calculateGameDimensions();
+      
+      if (this.game && this.game.scale) {
+        // Update game scale with new dimensions
+        this.game.scale.resize(dimensions.width, dimensions.height);
+      }
+    };
+
+    // Debounce resize events to prevent excessive updates
+    let resizeTimeout: number | null = null;
+    window.addEventListener('resize', () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(handleResize, 150);
+    });
+  }
+
+  private toggleFullscreen() {
+    if (this.game && this.game.scale) {
+      if (this.game.scale.isFullscreen) {
+        this.game.scale.stopFullscreen();
+      } else {
+        this.game.scale.startFullscreen();
+      }
+    }
   }
 
   private setupEventHandlers() {
@@ -112,6 +195,10 @@ class MurmurationGame {
         case 'e':
           this.wsClient.activatePulse();
           break;
+        case 'f':
+        case 'F':
+          this.toggleFullscreen();
+          break;
       }
     });
   }
@@ -135,12 +222,14 @@ function initializeGame(): void {
   if (!gameContainer) {
     gameContainer = document.createElement('div');
     gameContainer.id = 'game-container';
-    gameContainer.style.width = '100%';
+    gameContainer.style.width = '100vw';
     gameContainer.style.height = '100vh';
     gameContainer.style.display = 'flex';
     gameContainer.style.justifyContent = 'center';
     gameContainer.style.alignItems = 'center';
     gameContainer.style.background = '#1a1a2e';
+    gameContainer.style.overflow = 'hidden'; // Prevent scrollbars
+    gameContainer.style.position = 'relative';
     document.body.appendChild(gameContainer);
   }
 
@@ -155,6 +244,7 @@ function initializeGame(): void {
         <div>P: Pause, R: Resume</div>
         <div>-: Slow (0.5x), =: Fast (2x)</div>
         <div>E: Emergency Pulse</div>
+        <div>F: Toggle Fullscreen</div>
         <br>
         <div><strong>Camera:</strong></div>
         <div>Arrow Keys / WASD: Move</div>
