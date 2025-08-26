@@ -245,12 +245,13 @@ class SimulationServer:
         beacon_type = beacon_data.get('type', 'food')
         
         # Place beacon in whichever simulation is active
+        logger.info("🌟 place_beacon called", beacon_data=beacon_data, genetic_sim=bool(self.genetic_sim), regular_sim=bool(self.simulation))
         if self.genetic_sim:
-            self.genetic_sim.place_beacon(beacon_type, x, y)
-            logger.info("Beacon placed in genetic sim", type=beacon_type, x=x, y=y)
+            result = self.genetic_sim.place_beacon(beacon_type, x, y)
+            logger.info("🌟 Beacon placed in genetic sim", type=beacon_type, x=x, y=y, result=result)
         elif self.simulation:
-            self.simulation.place_beacon(beacon_type, x, y)
-            logger.info("Beacon placed in regular sim", type=beacon_type, x=x, y=y)
+            result = self.simulation.place_beacon(beacon_type, x, y)
+            logger.info("🌟 Beacon placed in regular sim", type=beacon_type, x=x, y=y, result=result)
         
     async def remove_beacon(self, beacon_id: int) -> None:
         """Remove a beacon from the simulation."""

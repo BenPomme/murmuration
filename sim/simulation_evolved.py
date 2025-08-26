@@ -15,8 +15,9 @@ import json
 from pathlib import Path
 
 from .core.agent import Agent, create_agent
-from .core.types import AgentID
+from .core.types import AgentID, Tick, create_vector2d
 from .utils.logging import get_logger
+from .beacons.beacon import BeaconManager, BeaconType, BEACON_SPECS
 
 logger = get_logger("evolved_simulation")
 
@@ -188,7 +189,7 @@ class EvolvedSimulation:
         self.panic_events = 0  # Times flock panicked
         
         # Beacons and effects
-        self.beacons: List[Dict[str, Any]] = []
+        self.beacon_manager = BeaconManager(budget_limit=self.config.beacon_budget)
         self.active_pulses: List[Dict[str, Any]] = []
         self.last_pulse_time = 0
         
@@ -280,26 +281,76 @@ class EvolvedSimulation:
                         separation = (diff / dist) * 50 / dist
                         agent.velocity += separation * dt
             
-            # 3. Enhanced beacon influence
-            for beacon in self.beacons:
-                to_beacon = np.array([beacon['x'] - agent.position[0], beacon['y'] - agent.position[1]])
-                dist = np.linalg.norm(to_beacon)
+            # 3. Sophisticated beacon influence using BeaconManager
+            contributions = self.beacon_manager.get_combined_field_contribution(
+                agent.position, 
+                Tick(self.tick),
+                is_night=(self.tick % 1800) > 900  # Day/night cycle: night from tick 900-1800
+            )
+            
+            # Apply beacon effects with agent sensitivity
+            beacon_response = agent.beacon_response
+            
+            # Light beacon attraction (mainly at night)
+            if contributions["light_attraction"] > 0:
+                # Find strongest light beacon for directional attraction
+                max_light_strength = 0
+                light_direction = np.array([0.0, 0.0])
                 
-                # Graduated influence based on distance
-                if dist < beacon['radius']:
-                    # Influence stronger at center
-                    influence = 1.0 - (dist / beacon['radius'])**2
-                    strength = beacon['strength'] * influence * agent.beacon_response
-                    
-                    if beacon['type'] == 'food':
-                        agent.energy = min(100, agent.energy + 0.5 * influence)
-                        agent.velocity += (to_beacon / dist) * strength * dt
-                    elif beacon['type'] == 'shelter':
-                        agent.stress = max(0, agent.stress - 0.02 * influence)
-                        agent.velocity *= (1 - 0.05 * influence)  # Slow down more at center
-                    elif beacon['type'] == 'thermal':
-                        agent.velocity[0] += strength * influence * dt
-                        agent.energy = min(100, agent.energy + 0.3 * influence)
+                for beacon in self.beacon_manager.beacons:
+                    if beacon.beacon_type == BeaconType.LIGHT:
+                        strength = beacon.get_field_strength(agent.position, Tick(self.tick))
+                        if strength > max_light_strength:
+                            max_light_strength = strength
+                            to_beacon = beacon.position - agent.position
+                            dist = np.linalg.norm(to_beacon)
+                            if dist > 0:
+                                light_direction = to_beacon / dist
+                
+                if max_light_strength > 0:
+                    light_force = light_direction * contributions["light_attraction"] * beacon_response * 25 * dt
+                    agent.velocity += light_force
+            
+            # Sound beacon cohesion enhancement
+            if contributions["cohesion_boost"] > 0:
+                # Enhanced flocking behavior near sound beacons
+                cohesion_strength = contributions["cohesion_boost"] * beacon_response
+                # Apply stronger cohesion forces (already calculated above in step 1)
+                for other in alive_agents:
+                    if other.id != agent.id:
+                        diff = other.position - agent.position
+                        dist = np.linalg.norm(diff)
+                        if 50 < dist < 100:  # Cohesion range
+                            cohesion = (diff / dist) * 30 * (1 + cohesion_strength) / dist
+                            agent.velocity += cohesion * dt
+            
+            # Food scent foraging bias
+            if contributions["foraging_bias"] > 0:
+                # Find closest food beacon for energy restoration
+                for beacon in self.beacon_manager.beacons:
+                    if beacon.beacon_type == BeaconType.FOOD_SCENT:
+                        strength = beacon.get_field_strength(agent.position, Tick(self.tick))
+                        if strength > 0.1:  # Within effective range
+                            # Energy restoration
+                            energy_gain = strength * beacon_response * 0.8 * dt
+                            agent.energy = min(100, agent.energy + energy_gain)
+                            
+                            # Attraction toward food source
+                            to_beacon = beacon.position - agent.position
+                            dist = np.linalg.norm(to_beacon)
+                            if dist > 0:
+                                food_force = (to_beacon / dist) * strength * beacon_response * 20 * dt
+                                agent.velocity += food_force
+            
+            # Wind lure tailwind boost  
+            if contributions["wind_boost"] > 0:
+                # Forward velocity boost (assuming eastward migration)
+                wind_boost = contributions["wind_boost"] * beacon_response * 15 * dt
+                agent.velocity[0] += wind_boost  # Boost in X direction
+                
+                # Small energy bonus from favorable winds
+                energy_gain = contributions["wind_boost"] * beacon_response * 0.4 * dt
+                agent.energy = min(100, agent.energy + energy_gain)
             
             # 4. Advanced hazard responses
             for hazard in self.hazards:
@@ -420,6 +471,9 @@ class EvolvedSimulation:
             self.game_over = True
             logger.info(f"TIME UP! Partial success: {self.arrivals} arrivals")
         
+        # Cleanup expired beacons
+        self.beacon_manager.cleanup_expired_beacons(Tick(self.tick))
+        
         # Calculate survival rate for evolution
         survival_rate = (self.config.n_agents - self.losses) / self.config.n_agents
         
@@ -429,7 +483,19 @@ class EvolvedSimulation:
             'population': len(alive_agents),
             'arrivals': self.arrivals,
             'losses': self.losses,
-            'beacons': self.beacons,
+            'beacons': [
+                {
+                    'id': beacon.beacon_id,
+                    'type': beacon.beacon_type.value,
+                    'x': float(beacon.position[0]),
+                    'y': float(beacon.position[1]),
+                    'radius': beacon.spec.radius,
+                    'strength': beacon.get_field_strength(beacon.position, Tick(self.tick)),
+                    'cost': beacon.spec.cost,
+                    'decay': beacon.get_temporal_decay(Tick(self.tick))
+                }
+                for beacon in self.beacon_manager.beacons
+            ],
             'hazards': self.hazards,
             'destination': self.config.destination_zone,
             'game_over': self.game_over,
@@ -486,18 +552,30 @@ class EvolvedSimulation:
         return max(0, min(1, 1 - avg_dist / 200))
     
     def place_beacon(self, beacon_type: str, x: float, y: float) -> bool:
-        """Place a beacon with visual radius."""
-        beacon = {
-            'id': len(self.beacons),
-            'type': beacon_type,
-            'x': x,
-            'y': y,
-            'radius': 150,
-            'strength': 30
+        """Place a beacon using the sophisticated BeaconManager system."""
+        # Map client beacon types to BeaconType enum
+        type_mapping = {
+            'food': BeaconType.FOOD_SCENT,
+            'shelter': BeaconType.SOUND,  # Sound beacons provide cohesion/shelter effect
+            'thermal': BeaconType.WIND_LURE  # Wind lures provide forward boost like thermals
         }
-        self.beacons.append(beacon)
-        logger.info(f"Beacon placed: {beacon_type} at ({x:.0f}, {y:.0f})")
-        return True
+        
+        if beacon_type not in type_mapping:
+            logger.warning(f"Unknown beacon type: {beacon_type}")
+            return False
+        
+        mapped_type = type_mapping[beacon_type]
+        position = create_vector2d(x, y)
+        
+        # Try to place the beacon
+        beacon = self.beacon_manager.place_beacon(mapped_type, position, Tick(self.tick))
+        
+        if beacon:
+            logger.info(f"Beacon placed: {beacon_type} -> {mapped_type.value} at ({x:.0f}, {y:.0f})")
+            return True
+        else:
+            logger.warning(f"Beacon placement failed: budget exceeded or invalid position")
+            return False
     
     def activate_pulse(self, pulse_type: str) -> bool:
         """Activate a pulse effect."""
@@ -534,7 +612,7 @@ class EvolvedSimulation:
         """Complete reset for new attempt."""
         # Clear all game state
         self.agents.clear()
-        self.beacons.clear()
+        self.beacon_manager = BeaconManager(budget_limit=self.config.beacon_budget)  # Reset beacon manager
         self.active_pulses.clear()
         self.hazards.clear()
         

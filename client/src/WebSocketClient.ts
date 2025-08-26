@@ -144,6 +144,8 @@ export class WebSocketClient {
   }
 
   public placeBeacon(type: string, x: number, y: number): void {
+    console.log('🌐 WebSocketClient.placeBeacon called:', { type, x, y });
+    console.log('🌐 WebSocket readyState:', this.ws?.readyState);
     this.send({
       type: 'place_beacon',
       beacon: {
@@ -152,6 +154,7 @@ export class WebSocketClient {
         y: y
       }
     });
+    console.log('🌐 place_beacon message sent');
   }
 
   public removeBeacon(beaconId: string): void {
