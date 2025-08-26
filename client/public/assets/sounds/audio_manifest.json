@@ -1,0 +1,103 @@
+{
+  "ambient": {
+    "wind_light_loop": {
+      "file": "ambient/wind_light_loop.ogg",
+      "duration": 15,
+      "loop": true,
+      "volume": 0.3,
+      "description": "Light wind ambience for peaceful moments"
+    },
+    "wind_strong_loop": {
+      "file": "ambient/wind_strong_loop.ogg", 
+      "duration": 12,
+      "loop": true,
+      "volume": 0.5,
+      "description": "Strong wind for intense gameplay"
+    },
+    "nature_ambient_loop": {
+      "file": "ambient/nature_ambient_loop.ogg",
+      "duration": 30,
+      "loop": true, 
+      "volume": 0.2,
+      "description": "General nature background ambience"
+    }
+  },
+  "agents": {
+    "bird_chirp_01": {
+      "file": "agents/bird_chirp_01.ogg",
+      "duration": 0.5,
+      "volume": 0.6,
+      "description": "Short bird chirp for individual birds"
+    },
+    "bird_chirp_02": {
+      "file": "agents/bird_chirp_02.ogg", 
+      "duration": 0.8,
+      "volume": 0.6,
+      "description": "Alternative bird chirp sound"
+    },
+    "bird_wings_flap": {
+      "file": "agents/bird_wings_flap.ogg",
+      "duration": 1.2,
+      "volume": 0.4,
+      "description": "Wing flapping sound for movement"
+    },
+    "bird_stress_call": {
+      "file": "agents/bird_stress_call.ogg",
+      "duration": 0.7,
+      "volume": 0.7,
+      "description": "Distress call for panic situations"
+    }
+  },
+  "ui": {
+    "button_click": {
+      "file": "ui/button_click.ogg",
+      "duration": 0.2,
+      "volume": 0.8,
+      "description": "Main button click sound"
+    },
+    "button_hover": {
+      "file": "ui/button_hover.ogg",
+      "duration": 0.1,
+      "volume": 0.3,
+      "description": "Button hover feedback"
+    },
+    "success_chime": {
+      "file": "ui/success_chime.ogg",
+      "duration": 1.0,
+      "volume": 0.7,
+      "description": "Success notification sound"
+    },
+    "error_beep": {
+      "file": "ui/error_beep.ogg",
+      "duration": 0.4,
+      "volume": 0.6,
+      "description": "Error notification sound"
+    }
+  },
+  "game": {
+    "level_start": {
+      "file": "game/level_start.ogg",
+      "duration": 2.0,
+      "volume": 0.8,
+      "description": "Level start fanfare"
+    },
+    "level_complete": {
+      "file": "game/level_complete.ogg",
+      "duration": 3.0,
+      "volume": 0.8,
+      "description": "Level completion celebration"
+    },
+    "beacon_place": {
+      "file": "game/beacon_place.ogg",
+      "duration": 0.3,
+      "volume": 0.5,
+      "description": "Beacon placement confirmation"
+    },
+    "evolution_success": {
+      "file": "game/evolution_success.ogg",
+      "duration": 2.5,
+      "volume": 0.7,
+      "description": "Breed evolution achievement"
+    }
+  }
+}

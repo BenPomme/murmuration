@@ -1,0 +1,567 @@
+name: Murmuration CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run performance tests nightly
+    - cron: '0 2 * * *'
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Python backend tests
+  backend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest pytest-cov pytest-asyncio
+        
+    - name: Run Python tests
+      run: |
+        pytest tests/ -v --cov=sim --cov-report=xml --cov-report=html
+        
+    - name: Upload Python coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: backend
+        name: backend-coverage
+        
+    - name: Archive Python test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: python-test-results
+        path: htmlcov/
+
+  # Frontend unit tests
+  frontend-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run linting
+      run: npm run lint
+      
+    - name: Run unit tests with coverage
+      run: npm run test:coverage
+      
+    - name: Upload frontend coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./client/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+        
+    - name: Archive test coverage
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-coverage
+        path: client/coverage/
+
+  # TypeScript compilation check
+  typescript-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Type check
+      run: npx tsc --noEmit
+      
+    - name: Build check
+      run: npm run build
+
+  # Visual regression tests
+  visual-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run visual regression tests
+      run: npm run test -- --run src/__tests__/visual/
+      
+    - name: Archive visual test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: visual-test-results
+        path: client/visual-test-results/
+
+  # End-to-end tests
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    services:
+      # Start game server for E2E tests
+      game-server:
+        image: python:3.11
+        env:
+          PYTHONPATH: /workspace
+        volumes:
+          - ${{ github.workspace }}:/workspace
+        ports:
+          - 8000:8000
+        options: >-
+          --health-cmd "curl -f http://localhost:8000/health || exit 1"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 3
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps
+      
+    - name: Start game server
+      run: |
+        cd ..
+        python -m pip install -e .
+        python -m sim.server &
+        sleep 10
+      
+    - name: Run E2E tests
+      run: npm run e2e
+      
+    - name: Archive E2E test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: e2e-test-results
+        path: |
+          client/test-results/
+          client/playwright-report/
+
+  # Performance tests (runs on schedule and main branch)
+  performance-tests:
+    if: github.event_name == 'schedule' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      
+    - name: Start game server
+      run: |
+        cd ..
+        python -m pip install -e .
+        python -m sim.server &
+        sleep 10
+        
+    - name: Run performance tests
+      run: npx playwright test tests/e2e/performance-e2e.spec.ts
+      
+    - name: Run unit performance tests
+      run: npm run test -- --run src/__tests__/performance/
+      
+    - name: Archive performance results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-test-results
+        path: |
+          client/test-results/
+          client/performance-reports/
+
+  # Cross-browser testing
+  cross-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    strategy:
+      matrix:
+        browser: [chromium, firefox, webkit]
+        
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps ${{ matrix.browser }}
+      
+    - name: Start game server
+      run: |
+        cd ..
+        python -m pip install -e .
+        python -m sim.server &
+        sleep 10
+        
+    - name: Run E2E tests on ${{ matrix.browser }}
+      run: npx playwright test --project=${{ matrix.browser }}
+      
+    - name: Archive browser-specific results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.browser }}-test-results
+        path: |
+          client/test-results/
+          client/playwright-report/
+
+  # Mobile testing
+  mobile-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      
+    - name: Start game server
+      run: |
+        cd ..
+        python -m pip install -e .
+        python -m sim.server &
+        sleep 10
+        
+    - name: Run mobile E2E tests
+      run: npx playwright test --project="Mobile Chrome" --project="Mobile Safari"
+      
+    - name: Archive mobile test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: mobile-test-results
+        path: |
+          client/test-results/
+          client/playwright-report/
+
+  # Accessibility tests
+  accessibility-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      
+    - name: Install axe-playwright
+      run: npm install --save-dev @axe-core/playwright
+      
+    - name: Start game server
+      run: |
+        cd ..
+        python -m pip install -e .
+        python -m sim.server &
+        sleep 10
+        
+    - name: Run accessibility tests
+      run: npx playwright test tests/e2e/accessibility.spec.ts
+      
+    - name: Archive accessibility results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: accessibility-test-results
+        path: client/accessibility-reports/
+
+  # Security tests
+  security-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Snyk security scan
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --file=client/package.json --severity-threshold=medium
+        
+    - name: Run npm audit
+      run: |
+        cd client
+        npm audit --audit-level moderate
+
+  # Build and deployment preparation
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [frontend-unit-tests, typescript-check]
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: client/dist/
+        
+    - name: Run build size analysis
+      run: |
+        echo "Build size analysis:"
+        du -sh dist/
+        find dist/ -name "*.js" -exec basename {} \; | head -10
+
+  # Test result aggregation and reporting
+  test-results:
+    runs-on: ubuntu-latest
+    needs: [
+      backend-tests,
+      frontend-unit-tests,
+      e2e-tests,
+      cross-browser,
+      mobile-tests,
+      accessibility-tests
+    ]
+    if: always()
+    
+    steps:
+    - name: Download all test artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Generate test report
+      run: |
+        echo "# Test Results Summary" > test-summary.md
+        echo "" >> test-summary.md
+        
+        echo "## Backend Tests" >> test-summary.md
+        if [ -d "python-test-results" ]; then
+          echo "✅ Backend tests completed" >> test-summary.md
+        else
+          echo "❌ Backend tests failed" >> test-summary.md
+        fi
+        
+        echo "" >> test-summary.md
+        echo "## Frontend Tests" >> test-summary.md
+        if [ -d "frontend-coverage" ]; then
+          echo "✅ Frontend unit tests completed" >> test-summary.md
+        else
+          echo "❌ Frontend unit tests failed" >> test-summary.md
+        fi
+        
+        echo "" >> test-summary.md
+        echo "## E2E Tests" >> test-summary.md
+        if [ -d "e2e-test-results" ]; then
+          echo "✅ E2E tests completed" >> test-summary.md
+        else
+          echo "❌ E2E tests failed" >> test-summary.md
+        fi
+        
+        echo "" >> test-summary.md
+        echo "## Cross-browser Tests" >> test-summary.md
+        browsers=("chromium" "firefox" "webkit")
+        for browser in "${browsers[@]}"; do
+          if [ -d "${browser}-test-results" ]; then
+            echo "✅ ${browser} tests completed" >> test-summary.md
+          else
+            echo "❌ ${browser} tests failed" >> test-summary.md
+          fi
+        done
+        
+        cat test-summary.md
+        
+    - name: Upload test summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-summary
+        path: test-summary.md
+
+  # Deploy to staging (on develop branch)
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [build, test-results]
+    environment: staging
+    
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifacts
+        path: ./dist
+        
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add actual deployment commands here
+        
+  # Deploy to production (on main branch)  
+  deploy-production:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [build, test-results, performance-tests]
+    environment: production
+    
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifacts
+        path: ./dist
+        
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add actual deployment commands here

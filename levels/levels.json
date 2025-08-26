@@ -1,0 +1,674 @@
+{
+  "W1-1": {
+    "name": "First Flight",
+    "description": "Learn the basics of guiding your flock",
+    "difficulty": "Easy",
+    "n_agents": 100,
+    "target_arrivals": 80,
+    "max_losses": 20,
+    "time_limit": 120,
+    "beacon_budget": 4,
+    "start_zone": [200, 600, 100],
+    "destination_zone": [1800, 600, 150],
+    "hazards": [
+      {
+        "type": "storm",
+        "x": 1000,
+        "y": 600,
+        "radius": 150,
+        "strength": 20,
+        "direction": [0, -1]
+      }
+    ],
+    "bonus_objectives": {
+      "speed_bonus": 60,
+      "perfect_cohesion": 0.8,
+      "no_beacon_challenge": false
+    }
+  },
+  
+  "W1-2": {
+    "name": "Predator Valley",
+    "description": "Navigate through predator territory",
+    "difficulty": "Easy",
+    "n_agents": 120,
+    "target_arrivals": 90,
+    "max_losses": 30,
+    "time_limit": 150,
+    "beacon_budget": 5,
+    "start_zone": [100, 300, 120],
+    "destination_zone": [1900, 900, 120],
+    "hazards": [
+      {
+        "type": "predator",
+        "x": 600,
+        "y": 400,
+        "radius": 120,
+        "danger": 0.6,
+        "speed": 6
+      },
+      {
+        "type": "predator",
+        "x": 1200,
+        "y": 700,
+        "radius": 120,
+        "danger": 0.6,
+        "speed": 6
+      },
+      {
+        "type": "predator",
+        "x": 900,
+        "y": 550,
+        "radius": 100,
+        "danger": 0.7,
+        "speed": 8
+      }
+    ]
+  },
+  
+  "W2-1": {
+    "name": "Storm Front",
+    "description": "Battle through severe weather",
+    "difficulty": "Medium",
+    "n_agents": 150,
+    "target_arrivals": 100,
+    "max_losses": 50,
+    "time_limit": 120,
+    "beacon_budget": 4,
+    "start_zone": [100, 600, 100],
+    "destination_zone": [1900, 600, 100],
+    "hazards": [
+      {
+        "type": "storm",
+        "x": 500,
+        "y": 400,
+        "radius": 200,
+        "strength": 25,
+        "direction": [1, -1]
+      },
+      {
+        "type": "storm",
+        "x": 1000,
+        "y": 800,
+        "radius": 200,
+        "strength": 25,
+        "direction": [-1, 1]
+      },
+      {
+        "type": "storm",
+        "x": 1500,
+        "y": 600,
+        "radius": 180,
+        "strength": 30,
+        "direction": [0, -1]
+      }
+    ]
+  },
+  
+  "W2-2": {
+    "name": "The Gauntlet",
+    "description": "Mixed hazards challenge",
+    "difficulty": "Medium",
+    "n_agents": 100,
+    "target_arrivals": 70,
+    "max_losses": 30,
+    "time_limit": 100,
+    "beacon_budget": 3,
+    "start_zone": [50, 600, 80],
+    "destination_zone": [1950, 600, 80],
+    "hazards": [
+      {
+        "type": "storm",
+        "x": 400,
+        "y": 600,
+        "radius": 150,
+        "strength": 20,
+        "direction": [0, 1]
+      },
+      {
+        "type": "predator",
+        "x": 800,
+        "y": 300,
+        "radius": 150,
+        "danger": 0.7,
+        "speed": 7
+      },
+      {
+        "type": "predator",
+        "x": 800,
+        "y": 900,
+        "radius": 150,
+        "danger": 0.7,
+        "speed": 7
+      },
+      {
+        "type": "storm",
+        "x": 1200,
+        "y": 600,
+        "radius": 200,
+        "strength": 25,
+        "direction": [0, -1]
+      },
+      {
+        "type": "predator",
+        "x": 1600,
+        "y": 600,
+        "radius": 120,
+        "danger": 0.8,
+        "speed": 9
+      }
+    ]
+  },
+  
+  "W3-1": {
+    "name": "Migration Marathon",
+    "description": "Long distance endurance test",
+    "difficulty": "Hard",
+    "n_agents": 200,
+    "target_arrivals": 150,
+    "max_losses": 50,
+    "time_limit": 180,
+    "beacon_budget": 6,
+    "start_zone": [50, 600, 150],
+    "destination_zone": [1950, 600, 100],
+    "hazards": [
+      {
+        "type": "storm",
+        "x": 300,
+        "y": 300,
+        "radius": 180,
+        "strength": 30,
+        "direction": [1, 1]
+      },
+      {
+        "type": "storm",
+        "x": 300,
+        "y": 900,
+        "radius": 180,
+        "strength": 30,
+        "direction": [1, -1]
+      },
+      {
+        "type": "predator",
+        "x": 700,
+        "y": 600,
+        "radius": 200,
+        "danger": 0.8,
+        "speed": 8
+      },
+      {
+        "type": "storm",
+        "x": 1000,
+        "y": 600,
+        "radius": 250,
+        "strength": 35,
+        "direction": [0, 0],
+        "rotating": true
+      },
+      {
+        "type": "predator",
+        "x": 1400,
+        "y": 400,
+        "radius": 150,
+        "danger": 0.9,
+        "speed": 10
+      },
+      {
+        "type": "predator",
+        "x": 1400,
+        "y": 800,
+        "radius": 150,
+        "danger": 0.9,
+        "speed": 10
+      },
+      {
+        "type": "storm",
+        "x": 1700,
+        "y": 600,
+        "radius": 150,
+        "strength": 40,
+        "direction": [-1, 0]
+      }
+    ]
+  },
+  
+  "W3-2": {
+    "name": "Apex Predators",
+    "description": "Survive the ultimate predator swarm",
+    "difficulty": "Hard",
+    "n_agents": 150,
+    "target_arrivals": 100,
+    "max_losses": 50,
+    "time_limit": 90,
+    "beacon_budget": 5,
+    "start_zone": [100, 600, 100],
+    "destination_zone": [1900, 600, 100],
+    "hazards": [
+      {
+        "type": "predator",
+        "x": 400,
+        "y": 300,
+        "radius": 130,
+        "danger": 0.9,
+        "speed": 12,
+        "patrol": true
+      },
+      {
+        "type": "predator",
+        "x": 400,
+        "y": 900,
+        "radius": 130,
+        "danger": 0.9,
+        "speed": 12,
+        "patrol": true
+      },
+      {
+        "type": "predator",
+        "x": 800,
+        "y": 600,
+        "radius": 180,
+        "danger": 1.0,
+        "speed": 10
+      },
+      {
+        "type": "predator",
+        "x": 1200,
+        "y": 450,
+        "radius": 140,
+        "danger": 0.95,
+        "speed": 11
+      },
+      {
+        "type": "predator",
+        "x": 1200,
+        "y": 750,
+        "radius": 140,
+        "danger": 0.95,
+        "speed": 11
+      },
+      {
+        "type": "predator",
+        "x": 1600,
+        "y": 600,
+        "radius": 160,
+        "danger": 1.0,
+        "speed": 15,
+        "alpha": true
+      }
+    ]
+  },
+  
+  "W4-1": {
+    "name": "Perfect Storm",
+    "description": "The ultimate weather challenge",
+    "difficulty": "Expert",
+    "n_agents": 100,
+    "target_arrivals": 80,
+    "max_losses": 20,
+    "time_limit": 120,
+    "beacon_budget": 3,
+    "start_zone": [100, 600, 80],
+    "destination_zone": [1900, 600, 80],
+    "hazards": [
+      {
+        "type": "storm",
+        "x": 500,
+        "y": 600,
+        "radius": 300,
+        "strength": 45,
+        "direction": [0, 0],
+        "rotating": true,
+        "lightning": true
+      },
+      {
+        "type": "storm",
+        "x": 1000,
+        "y": 300,
+        "radius": 200,
+        "strength": 35,
+        "direction": [0, 1]
+      },
+      {
+        "type": "storm",
+        "x": 1000,
+        "y": 900,
+        "radius": 200,
+        "strength": 35,
+        "direction": [0, -1]
+      },
+      {
+        "type": "storm",
+        "x": 1500,
+        "y": 600,
+        "radius": 250,
+        "strength": 50,
+        "direction": [-1, 0],
+        "lightning": true
+      }
+    ]
+  },
+  
+  "BONUS-1": {
+    "name": "Speed Run",
+    "description": "Get there FAST!",
+    "difficulty": "Special",
+    "n_agents": 50,
+    "target_arrivals": 45,
+    "max_losses": 5,
+    "time_limit": 30,
+    "beacon_budget": 2,
+    "start_zone": [100, 600, 60],
+    "destination_zone": [1900, 600, 100],
+    "hazards": [
+      {
+        "type": "storm",
+        "x": 1000,
+        "y": 600,
+        "radius": 400,
+        "strength": 20,
+        "direction": [2, 0]
+      }
+    ]
+  },
+  
+  "BONUS-2": {
+    "name": "No Beacon Challenge",
+    "description": "Pure skill, no beacons!",
+    "difficulty": "Special",
+    "n_agents": 100,
+    "target_arrivals": 80,
+    "max_losses": 20,
+    "time_limit": 120,
+    "beacon_budget": 0,
+    "start_zone": [100, 600, 100],
+    "destination_zone": [1900, 600, 120],
+    "hazards": [
+      {
+        "type": "predator",
+        "x": 600,
+        "y": 600,
+        "radius": 150,
+        "danger": 0.6,
+        "speed": 6
+      },
+      {
+        "type": "storm",
+        "x": 1200,
+        "y": 600,
+        "radius": 200,
+        "strength": 25,
+        "direction": [0, -1]
+      }
+    ]
+  },
+
+  "W4-2": {
+    "name": "Fog of War",
+    "description": "Navigate through dense fog banks",
+    "difficulty": "Expert",
+    "n_agents": 120,
+    "target_arrivals": 90,
+    "max_losses": 30,
+    "time_limit": 150,
+    "beacon_budget": 5,
+    "start_zone": [100, 600, 100],
+    "destination_zone": [1900, 600, 100],
+    "hazards": [
+      {
+        "type": "fog",
+        "x": 400,
+        "y": 600,
+        "radius": 250,
+        "strength": 30
+      },
+      {
+        "type": "predator",
+        "x": 400,
+        "y": 600,
+        "radius": 120,
+        "danger": 0.8,
+        "speed": 8
+      },
+      {
+        "type": "fog",
+        "x": 900,
+        "y": 400,
+        "radius": 200,
+        "strength": 25
+      },
+      {
+        "type": "fog",
+        "x": 900,
+        "y": 800,
+        "radius": 200,
+        "strength": 25
+      },
+      {
+        "type": "turbulence",
+        "x": 1200,
+        "y": 600,
+        "radius": 180,
+        "strength": 35
+      },
+      {
+        "type": "fog",
+        "x": 1600,
+        "y": 600,
+        "radius": 220,
+        "strength": 30
+      }
+    ]
+  },
+
+  "W5-1": {
+    "name": "Turbulent Skies",
+    "description": "Battle through violent air currents",
+    "difficulty": "Extreme",
+    "n_agents": 100,
+    "target_arrivals": 70,
+    "max_losses": 30,
+    "time_limit": 100,
+    "beacon_budget": 4,
+    "start_zone": [150, 600, 80],
+    "destination_zone": [1850, 600, 80],
+    "hazards": [
+      {
+        "type": "turbulence",
+        "x": 500,
+        "y": 300,
+        "radius": 150,
+        "strength": 40
+      },
+      {
+        "type": "turbulence",
+        "x": 500,
+        "y": 900,
+        "radius": 150,
+        "strength": 40
+      },
+      {
+        "type": "storm",
+        "x": 800,
+        "y": 600,
+        "radius": 200,
+        "strength": 35,
+        "direction": [0, 0],
+        "rotating": true
+      },
+      {
+        "type": "turbulence",
+        "x": 1100,
+        "y": 600,
+        "radius": 180,
+        "strength": 45
+      },
+      {
+        "type": "predator",
+        "x": 1400,
+        "y": 400,
+        "radius": 120,
+        "danger": 0.9,
+        "speed": 10
+      },
+      {
+        "type": "predator",
+        "x": 1400,
+        "y": 800,
+        "radius": 120,
+        "danger": 0.9,
+        "speed": 10
+      }
+    ]
+  },
+
+  "W5-2": {
+    "name": "Electric Storm",
+    "description": "Survive the electromagnetic tempest",
+    "difficulty": "Extreme",
+    "n_agents": 150,
+    "target_arrivals": 100,
+    "max_losses": 50,
+    "time_limit": 120,
+    "beacon_budget": 5,
+    "start_zone": [100, 600, 120],
+    "destination_zone": [1900, 600, 100],
+    "hazards": [
+      {
+        "type": "electric_field",
+        "x": 400,
+        "y": 600,
+        "radius": 180,
+        "strength": 15
+      },
+      {
+        "type": "storm",
+        "x": 700,
+        "y": 400,
+        "radius": 150,
+        "strength": 30,
+        "direction": [1, 1],
+        "lightning": true
+      },
+      {
+        "type": "storm",
+        "x": 700,
+        "y": 800,
+        "radius": 150,
+        "strength": 30,
+        "direction": [1, -1],
+        "lightning": true
+      },
+      {
+        "type": "electric_field",
+        "x": 1000,
+        "y": 600,
+        "radius": 220,
+        "strength": 20
+      },
+      {
+        "type": "turbulence",
+        "x": 1300,
+        "y": 600,
+        "radius": 160,
+        "strength": 35
+      },
+      {
+        "type": "electric_field",
+        "x": 1600,
+        "y": 600,
+        "radius": 150,
+        "strength": 25
+      }
+    ]
+  },
+
+  "W6-1": {
+    "name": "The Maelstrom",
+    "description": "Everything at once - the ultimate challenge",
+    "difficulty": "Nightmare",
+    "n_agents": 200,
+    "target_arrivals": 120,
+    "max_losses": 80,
+    "time_limit": 180,
+    "beacon_budget": 6,
+    "start_zone": [50, 600, 150],
+    "destination_zone": [1950, 600, 120],
+    "hazards": [
+      {
+        "type": "fog",
+        "x": 300,
+        "y": 600,
+        "radius": 200,
+        "strength": 25
+      },
+      {
+        "type": "electric_field",
+        "x": 500,
+        "y": 400,
+        "radius": 140,
+        "strength": 15
+      },
+      {
+        "type": "electric_field",
+        "x": 500,
+        "y": 800,
+        "radius": 140,
+        "strength": 15
+      },
+      {
+        "type": "storm",
+        "x": 750,
+        "y": 600,
+        "radius": 250,
+        "strength": 45,
+        "direction": [0, 0],
+        "rotating": true,
+        "lightning": true
+      },
+      {
+        "type": "turbulence",
+        "x": 1000,
+        "y": 300,
+        "radius": 150,
+        "strength": 40
+      },
+      {
+        "type": "turbulence",
+        "x": 1000,
+        "y": 900,
+        "radius": 150,
+        "strength": 40
+      },
+      {
+        "type": "predator",
+        "x": 1250,
+        "y": 600,
+        "radius": 180,
+        "danger": 1.0,
+        "speed": 12,
+        "alpha": true
+      },
+      {
+        "type": "fog",
+        "x": 1500,
+        "y": 400,
+        "radius": 160,
+        "strength": 30
+      },
+      {
+        "type": "fog",
+        "x": 1500,
+        "y": 800,
+        "radius": 160,
+        "strength": 30
+      },
+      {
+        "type": "electric_field",
+        "x": 1750,
+        "y": 600,
+        "radius": 180,
+        "strength": 30
+      }
+    ]
+  }
+}

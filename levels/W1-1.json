@@ -1,0 +1,23 @@
+{
+  "id": "W1-1",
+  "name": "First Flight",
+  "distance_km": 40,
+  "time_limit_days": 6,
+  "targets": {
+    "arrivals_min": 70,
+    "cohesion_avg_min": 0.55,
+    "losses_max": 20,
+    "beacon_budget_max": 6
+  },
+  "seasons_allowed": 2,
+  "hazards": {
+    "predator_hotspots": 0,
+    "storms": {
+      "planned_days": [],
+      "random_daily_prob": 0.0
+    },
+    "protected_zones": [],
+    "light_pollution": false
+  },
+  "notes": "Gentle wind; few predators. A good introduction to beacon placement and flock guidance."
+}

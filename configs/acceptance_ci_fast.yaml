@@ -1,0 +1,7 @@
+seeds: [101]  # Single seed for fast CI
+levels:
+  W1-1:
+    arrivals_min: 70
+    cohesion_avg_min: 0.55
+    losses_max: 20
+    wall_time_s_max: 120  # Shorter timeout for CI

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Murmuration Audio Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .audio-category { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .audio-item { margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px; }
+        button { margin: 5px; padding: 8px 12px; cursor: pointer; }
+        .missing { color: red; }
+        .loaded { color: green; }
+    </style>
+</head>
+<body>
+    <h1>🎵 Murmuration Audio Assets Test</h1>
+    <p>This page helps test all audio assets for the game.</p>
+    
+    <div class="audio-category">
+        <h2>🌪️ Ambient Sounds</h2>
+        <div class="audio-item">
+            <strong>Wind Light Loop:</strong>
+            <button onclick="playAudio('ambient/wind_light_loop.ogg')">Play</button>
+            <button onclick="stopAudio()">Stop</button>
+            <span id="status-wind-light" class="missing">Not loaded</span>
+        </div>
+        <div class="audio-item">
+            <strong>Nature Ambient:</strong>
+            <button onclick="playAudio('ambient/nature_ambient_loop.ogg')">Play</button>
+            <button onclick="stopAudio()">Stop</button>
+            <span id="status-nature" class="missing">Not loaded</span>
+        </div>
+    </div>
+
+    <div class="audio-category">
+        <h2>🐦 Bird/Agent Sounds</h2>
+        <div class="audio-item">
+            <strong>Bird Chirp:</strong>
+            <button onclick="playAudio('agents/bird_chirp_01.ogg')">Play</button>
+            <span id="status-chirp" class="missing">Not loaded</span>
+        </div>
+        <div class="audio-item">
+            <strong>Wing Flap:</strong>
+            <button onclick="playAudio('agents/bird_wings_flap.ogg')">Play</button>
+            <span id="status-wings" class="missing">Not loaded</span>
+        </div>
+    </div>
+
+    <div class="audio-category">
+        <h2>🖱️ UI Sounds</h2>
+        <div class="audio-item">
+            <strong>Button Click:</strong>
+            <button onclick="playAudio('ui/button_click.ogg')">Play</button>
+            <span id="status-click" class="missing">Not loaded</span>
+        </div>
+        <div class="audio-item">
+            <strong>Success Chime:</strong>
+            <button onclick="playAudio('ui/success_chime.ogg')">Play</button>
+            <span id="status-success" class="missing">Not loaded</span>
+        </div>
+    </div>
+
+    <div class="audio-category">
+        <h2>🎮 Game Event Sounds</h2>
+        <div class="audio-item">
+            <strong>Level Complete:</strong>
+            <button onclick="playAudio('game/level_complete.ogg')">Play</button>
+            <span id="status-level" class="missing">Not loaded</span>
+        </div>
+        <div class="audio-item">
+            <strong>Beacon Place:</strong>
+            <button onclick="playAudio('game/beacon_place.ogg')">Play</button>
+            <span id="status-beacon" class="missing">Not loaded</span>
+        </div>
+    </div>
+
+    <script>
+        let currentAudio = null;
+        
+        function playAudio(src) {
+            stopAudio();
+            currentAudio = new Audio(src);
+            currentAudio.play().catch(e => {
+                console.error('Audio play failed:', e);
+                alert('Could not play audio: ' + src);
+            });
+        }
+        
+        function stopAudio() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
+        }
+        
+        // Test audio file availability on load
+        window.addEventListener('load', () => {
+            const audioFiles = [
+                'ambient/wind_light_loop.ogg',
+                'ambient/nature_ambient_loop.ogg', 
+                'agents/bird_chirp_01.ogg',
+                'agents/bird_wings_flap.ogg',
+                'ui/button_click.ogg',
+                'ui/success_chime.ogg',
+                'game/level_complete.ogg',
+                'game/beacon_place.ogg'
+            ];
+            
+            audioFiles.forEach(file => {
+                const audio = new Audio(file);
+                audio.addEventListener('canplaythrough', () => {
+                    const statusId = 'status-' + file.split('/')[1].replace(/[^a-z]/g, '').substring(0, 10);
+                    const statusEl = document.getElementById(statusId);
+                    if (statusEl) {
+                        statusEl.textContent = 'Ready';
+                        statusEl.className = 'loaded';
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

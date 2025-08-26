@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/murmuration-icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Murmuration - An influence-not-control evolution game where players guide bird flocks through hazards using environmental beacons." />
+    <title>Murmuration</title>
+    
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+      }
+      
+      #loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: white;
+        font-size: 24px;
+        z-index: 1000;
+      }
+      
+      #loading .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid rgba(255, 255, 255, 0.2);
+        border-top: 5px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-top: 20px;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      #game-container {
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+      }
+      
+      canvas {
+        display: block;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        border-radius: 8px;
+      }
+      
+      /* Hide loading screen when game is ready */
+      body.game-loaded #loading {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Loading screen -->
+    <div id="loading">
+      <h1>Murmuration</h1>
+      <p>Loading game...</p>
+      <div class="spinner"></div>
+    </div>
+    
+    <!-- Game will be injected here -->
+    <div id="game-container"></div>
+    
+    <script type="module" src="/src/main.ts"></script>
+    
+    <script>
+      // Remove loading screen once game starts
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          document.body.classList.add('game-loaded');
+        }, 1000);
+      });
+      
+      // Handle runtime errors gracefully
+      window.addEventListener('error', (event) => {
+        console.error('Runtime error:', event.error);
+        const loading = document.getElementById('loading');
+        if (loading) {
+          loading.innerHTML = '<h1>Error</h1><p>Failed to load game. Please refresh the page.</p>';
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "murmuration",
+  "version": "1.0.0",
+  "description": "An \"influence-not-control\" evolution sandbox where players guide migratory micro-bird flocks using environmental signals. Agents learn across seasons via lightweight ML.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.4",
+    "@phaserjs/editor-mcp-server": "github:phaserjs/editor-mcp-server",
+    "@playwright/mcp": "^0.0.35"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

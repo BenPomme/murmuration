@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" aria-label="Murmuration flock icon">
+  <defs>
+    <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#87CEEB;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E0F6FF;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Sky background -->
+  <rect width="100" height="100" fill="url(#skyGradient)" rx="15"/>
+  
+  <!-- Flock of birds in murmuration pattern -->
+  <!-- Bird 1 -->
+  <path d="M20 30 L22 32 L20 34 L18 32 Z" fill="#2563eb"/>
+  <path d="M16 32 L20 30 L20 34" fill="none" stroke="#2563eb" stroke-width="0.5"/>
+  
+  <!-- Bird 2 -->
+  <path d="M35 25 L37 27 L35 29 L33 27 Z" fill="#1d4ed8"/>
+  <path d="M31 27 L35 25 L35 29" fill="none" stroke="#1d4ed8" stroke-width="0.5"/>
+  
+  <!-- Bird 3 -->
+  <path d="M50 35 L52 37 L50 39 L48 37 Z" fill="#2563eb"/>
+  <path d="M46 37 L50 35 L50 39" fill="none" stroke="#2563eb" stroke-width="0.5"/>
+  
+  <!-- Bird 4 -->
+  <path d="M65 20 L67 22 L65 24 L63 22 Z" fill="#3b82f6"/>
+  <path d="M61 22 L65 20 L65 24" fill="none" stroke="#3b82f6" stroke-width="0.5"/>
+  
+  <!-- Bird 5 -->
+  <path d="M80 40 L82 42 L80 44 L78 42 Z" fill="#1d4ed8"/>
+  <path d="M76 42 L80 40 L80 44" fill="none" stroke="#1d4ed8" stroke-width="0.5"/>
+  
+  <!-- Bird 6 -->
+  <path d="M25 55 L27 57 L25 59 L23 57 Z" fill="#2563eb"/>
+  <path d="M21 57 L25 55 L25 59" fill="none" stroke="#2563eb" stroke-width="0.5"/>
+  
+  <!-- Bird 7 -->
+  <path d="M45 50 L47 52 L45 54 L43 52 Z" fill="#3b82f6"/>
+  <path d="M41 52 L45 50 L45 54" fill="none" stroke="#3b82f6" stroke-width="0.5"/>
+  
+  <!-- Bird 8 -->
+  <path d="M70 45 L72 47 L70 49 L68 47 Z" fill="#1d4ed8"/>
+  <path d="M66 47 L70 45 L70 49" fill="none" stroke="#1d4ed8" stroke-width="0.5"/>
+  
+  <!-- Bird 9 -->
+  <path d="M30 75 L32 77 L30 79 L28 77 Z" fill="#2563eb"/>
+  <path d="M26 77 L30 75 L30 79" fill="none" stroke="#2563eb" stroke-width="0.5"/>
+  
+  <!-- Bird 10 -->
+  <path d="M55 70 L57 72 L55 74 L53 72 Z" fill="#3b82f6"/>
+  <path d="M51 72 L55 70 L55 74" fill="none" stroke="#3b82f6" stroke-width="0.5"/>
+  
+  <!-- Bird 11 -->
+  <path d="M75 65 L77 67 L75 69 L73 67 Z" fill="#1d4ed8"/>
+  <path d="M71 67 L75 65 L75 69" fill="none" stroke="#1d4ed8" stroke-width="0.5"/>
+  
+  <!-- Subtle flow lines showing murmuration pattern -->
+  <path d="M20 32 Q35 27 50 37 Q65 22 80 42" fill="none" stroke="#93c5fd" stroke-width="0.3" opacity="0.5"/>
+  <path d="M25 57 Q45 52 70 47" fill="none" stroke="#93c5fd" stroke-width="0.3" opacity="0.5"/>
+  <path d="M30 77 Q55 72 75 67" fill="none" stroke="#93c5fd" stroke-width="0.3" opacity="0.5"/>
+</svg>

@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Murmuration - Interactive Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            display: grid;
+            grid-template-columns: 250px 1fr 250px;
+            grid-template-rows: 80px 1fr 100px;
+            height: 100vh;
+            gap: 10px;
+            padding: 10px;
+        }
+        
+        /* Header */
+        .header {
+            grid-column: 1 / -1;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-right: auto;
+        }
+        
+        .status {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .metric {
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #4ade80;
+        }
+        
+        .metric-label {
+            font-size: 0.8em;
+            opacity: 0.8;
+        }
+        
+        /* Left Panel - Beacons */
+        .beacons-panel {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .beacon-card {
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        
+        .beacon-card:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateX(5px);
+        }
+        
+        .beacon-card.selected {
+            border-color: #4ade80;
+            background: rgba(74, 222, 128, 0.2);
+        }
+        
+        .beacon-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .beacon-cost {
+            font-size: 0.9em;
+            color: #fbbf24;
+        }
+        
+        .beacon-description {
+            font-size: 0.8em;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+        
+        /* Canvas */
+        .canvas-container {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            position: relative;
+            backdrop-filter: blur(10px);
+            overflow: hidden;
+        }
+        
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        
+        .canvas-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        
+        /* Right Panel - Objectives */
+        .objectives-panel {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .objective {
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .objective.complete {
+            background: rgba(74, 222, 128, 0.2);
+            border: 1px solid #4ade80;
+        }
+        
+        .objective-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .objective-progress {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        
+        .objective-bar {
+            height: 100%;
+            background: #4ade80;
+            transition: width 0.3s;
+        }
+        
+        /* Controls */
+        .controls {
+            grid-column: 1 / -1;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+        }
+        
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1em;
+        }
+        
+        button:hover:not(:disabled) {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.05);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        button.primary {
+            background: #4ade80;
+            color: #1e3c72;
+            font-weight: bold;
+        }
+        
+        button.danger {
+            background: #f87171;
+        }
+        
+        .speed-control {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        /* Placed beacons */
+        .beacon-marker {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(74, 222, 128, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(0,0,0,0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .warning {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(248, 113, 113, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <!-- Header with metrics -->
+        <div class="header">
+            <h1>🦅 Murmuration</h1>
+            <div class="status">
+                <div class="metric">
+                    <div class="metric-value" id="population">0</div>
+                    <div class="metric-label">Birds</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="arrivals">0</div>
+                    <div class="metric-label">Saved</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="losses">0</div>
+                    <div class="metric-label">Lost</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="cohesion">0.00</div>
+                    <div class="metric-label">Cohesion</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="day">Day 0</div>
+                    <div class="metric-label">Season</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Left Panel - Beacons -->
+        <div class="beacons-panel">
+            <h3>🔆 Beacons (4 remaining)</h3>
+            <div id="beacon-list">
+                <div class="beacon-card" data-beacon="food">
+                    <div class="beacon-name">🍎 Food Source</div>
+                    <div class="beacon-cost">Cost: 1 beacon</div>
+                    <div class="beacon-description">Attracts hungry birds with food</div>
+                </div>
+                <div class="beacon-card" data-beacon="water">
+                    <div class="beacon-name">💧 Water Source</div>
+                    <div class="beacon-cost">Cost: 1 beacon</div>
+                    <div class="beacon-description">Essential rest stop for the flock</div>
+                </div>
+                <div class="beacon-card" data-beacon="shelter">
+                    <div class="beacon-name">🏕️ Shelter</div>
+                    <div class="beacon-cost">Cost: 1 beacon</div>
+                    <div class="beacon-description">Safe haven from predators</div>
+                </div>
+                <div class="beacon-card" data-beacon="thermal">
+                    <div class="beacon-name">🌀 Thermal Lift</div>
+                    <div class="beacon-cost">Cost: 2 beacons</div>
+                    <div class="beacon-description">Boosts flight efficiency</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Canvas -->
+        <div class="canvas-container">
+            <canvas id="gameCanvas"></canvas>
+            <div class="canvas-overlay">
+                <div>Click to place beacon</div>
+                <div>Right-click to remove</div>
+            </div>
+            <div class="warning" id="warning">
+                <h3>⚠️ Hazard Approaching!</h3>
+                <p id="warning-text"></p>
+            </div>
+            <div class="tooltip" id="tooltip"></div>
+        </div>
+        
+        <!-- Right Panel - Objectives -->
+        <div class="objectives-panel">
+            <h3>🎯 Objectives</h3>
+            <div class="objective">
+                <div class="objective-title">✈️ Guide to Destination</div>
+                <div>Progress: <span id="migration-progress">0</span>%</div>
+                <div class="objective-progress">
+                    <div class="objective-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="objective">
+                <div class="objective-title">💔 Minimize Losses</div>
+                <div>Target: < 20 birds lost</div>
+                <div class="objective-progress">
+                    <div class="objective-bar" id="loss-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="objective">
+                <div class="objective-title">🤝 Maintain Cohesion</div>
+                <div>Target: > 0.6 average</div>
+                <div class="objective-progress">
+                    <div class="objective-bar" id="cohesion-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <h3 style="margin-top: 20px;">⚡ Pulses</h3>
+            <button class="pulse-btn" onclick="activatePulse('gather')">
+                🎯 Gather Pulse (Q)
+            </button>
+            <button class="pulse-btn" onclick="activatePulse('scatter')">
+                💨 Scatter Pulse (W)
+            </button>
+            <button class="pulse-btn" onclick="activatePulse('boost')">
+                🚀 Speed Boost (E)
+            </button>
+        </div>
+        
+        <!-- Bottom Controls -->
+        <div class="controls">
+            <button id="connect-btn" onclick="connect()" class="primary">Connect</button>
+            <button id="load-btn" onclick="loadLevel()" disabled>Start Level</button>
+            <button id="pause-btn" onclick="togglePause()" disabled>⏸️ Pause</button>
+            <div class="speed-control">
+                <button onclick="setSpeed(0.5)">0.5x</button>
+                <button onclick="setSpeed(1)" class="primary">1x</button>
+                <button onclick="setSpeed(2)">2x</button>
+                <button onclick="setSpeed(4)">4x</button>
+            </div>
+            <button onclick="toggleOverlay('risk')">Show Risks</button>
+            <button onclick="toggleOverlay('energy')">Show Energy</button>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let isPaused = false;
+        let selectedBeacon = null;
+        let placedBeacons = [];
+        let beaconBudget = 4;
+        let gameState = null;
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Resize canvas
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Beacon selection
+        document.querySelectorAll('.beacon-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('.beacon-card').forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+                selectedBeacon = card.dataset.beacon;
+                canvas.style.cursor = 'pointer';
+            });
+        });
+        
+        // Canvas click to place beacon
+        canvas.addEventListener('click', (e) => {
+            if (!selectedBeacon || beaconBudget <= 0) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * 2000;
+            const y = ((e.clientY - rect.top) / rect.height) * 1200;
+            
+            placeBeacon(selectedBeacon, x, y);
+        });
+        
+        // Right click to remove beacon
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            // Find nearest beacon to remove
+            const rect = canvas.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * 2000;
+            const y = ((e.clientY - rect.top) / rect.height) * 1200;
+            
+            removeNearestBeacon(x, y);
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'q': activatePulse('gather'); break;
+                case 'w': activatePulse('scatter'); break;
+                case 'e': activatePulse('boost'); break;
+                case ' ': togglePause(); break;
+                case '1': selectBeaconType('food'); break;
+                case '2': selectBeaconType('water'); break;
+                case '3': selectBeaconType('shelter'); break;
+                case '4': selectBeaconType('thermal'); break;
+            }
+        });
+        
+        function connect() {
+            if (ws) {
+                ws.close();
+                return;
+            }
+            
+            ws = new WebSocket('ws://localhost:8765');
+            
+            ws.onopen = () => {
+                document.getElementById('connect-btn').textContent = 'Disconnect';
+                document.getElementById('load-btn').disabled = false;
+                console.log('Connected!');
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('connect-btn').textContent = 'Connect';
+                document.getElementById('load-btn').disabled = true;
+                document.getElementById('pause-btn').disabled = true;
+                ws = null;
+            };
+            
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                if (message.type === 'state_update') {
+                    gameState = message.data;
+                    updateGame(message.data);
+                }
+            };
+        }
+        
+        function loadLevel() {
+            if (!ws) return;
+            ws.send(JSON.stringify({
+                type: 'load_level',
+                level: 'W1-1'
+            }));
+            document.getElementById('pause-btn').disabled = false;
+        }
+        
+        function updateGame(data) {
+            // Update metrics
+            document.getElementById('population').textContent = data.population || 0;
+            document.getElementById('arrivals').textContent = data.arrivals || 0;
+            document.getElementById('losses').textContent = data.losses || 0;
+            document.getElementById('cohesion').textContent = (data.cohesion || 0).toFixed(2);
+            document.getElementById('day').textContent = `Day ${data.season?.day || 0}`;
+            
+            // Update progress bars
+            const migrationProgress = (data.tick / 10000) * 100;
+            document.getElementById('migration-progress').textContent = Math.round(migrationProgress);
+            document.querySelector('.objective-bar').style.width = migrationProgress + '%';
+            
+            const lossProgress = Math.min(100, (data.losses / 20) * 100);
+            document.getElementById('loss-bar').style.width = lossProgress + '%';
+            
+            const cohesionProgress = (data.cohesion || 0) * 100;
+            document.getElementById('cohesion-bar').style.width = cohesionProgress + '%';
+            
+            // Draw the game
+            renderGame(data);
+        }
+        
+        function renderGame(data) {
+            // Clear canvas with sky gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, 'rgba(135, 206, 235, 0.3)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw migration path hint
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(100, canvas.height / 2);
+            ctx.lineTo(canvas.width - 100, canvas.height / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Draw placed beacons
+            placedBeacons.forEach(beacon => {
+                const x = (beacon.x / 2000) * canvas.width;
+                const y = (beacon.y / 1200) * canvas.height;
+                
+                // Beacon effect radius
+                ctx.beginPath();
+                ctx.arc(x, y, 50, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(74, 222, 128, 0.1)';
+                ctx.fill();
+                
+                // Beacon icon
+                ctx.beginPath();
+                ctx.arc(x, y, 10, 0, Math.PI * 2);
+                ctx.fillStyle = '#4ade80';
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+            
+            // Draw agents (birds)
+            if (data.agents) {
+                data.agents.forEach(agent => {
+                    if (!agent.alive) return;
+                    
+                    const x = (agent.x / 2000) * canvas.width;
+                    const y = (agent.y / 1200) * canvas.height;
+                    
+                    // Energy-based color
+                    const energy = agent.energy / 100;
+                    const hue = energy * 120; // Green when high, red when low
+                    
+                    // Draw bird as triangle pointing in velocity direction
+                    ctx.save();
+                    ctx.translate(x, y);
+                    
+                    const angle = Math.atan2(agent.vy, agent.vx);
+                    ctx.rotate(angle);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(5, 0);
+                    ctx.lineTo(-3, -3);
+                    ctx.lineTo(-3, 3);
+                    ctx.closePath();
+                    
+                    ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.8)`;
+                    ctx.fill();
+                    
+                    // Stress indicator
+                    if (agent.stress > 0.7) {
+                        ctx.strokeStyle = 'rgba(248, 113, 113, 0.8)';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                    
+                    ctx.restore();
+                    
+                    // Trail effect
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x - agent.vx * 0.5, y - agent.vy * 0.5);
+                    ctx.strokeStyle = `hsla(${hue}, 70%, 50%, 0.3)`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            }
+            
+            // Draw hazards if any
+            // TODO: Draw storms, predators, etc.
+        }
+        
+        function placeBeacon(type, x, y) {
+            if (!ws || beaconBudget <= 0) return;
+            
+            const beacon = {
+                id: Date.now(),
+                type: type,
+                x: x,
+                y: y
+            };
+            
+            placedBeacons.push(beacon);
+            beaconBudget--;
+            
+            ws.send(JSON.stringify({
+                type: 'place_beacon',
+                beacon: beacon
+            }));
+            
+            // Update UI
+            document.querySelector('.beacons-panel h3').textContent = 
+                `🔆 Beacons (${beaconBudget} remaining)`;
+        }
+        
+        function removeNearestBeacon(x, y) {
+            if (placedBeacons.length === 0) return;
+            
+            // Find nearest beacon
+            let nearest = null;
+            let minDist = Infinity;
+            
+            placedBeacons.forEach(beacon => {
+                const dist = Math.sqrt(
+                    Math.pow(beacon.x - x, 2) + 
+                    Math.pow(beacon.y - y, 2)
+                );
+                if (dist < minDist && dist < 100) { // Within 100 units
+                    minDist = dist;
+                    nearest = beacon;
+                }
+            });
+            
+            if (nearest) {
+                placedBeacons = placedBeacons.filter(b => b.id !== nearest.id);
+                beaconBudget++;
+                
+                if (ws) {
+                    ws.send(JSON.stringify({
+                        type: 'remove_beacon',
+                        id: nearest.id
+                    }));
+                }
+                
+                document.querySelector('.beacons-panel h3').textContent = 
+                    `🔆 Beacons (${beaconBudget} remaining)`;
+            }
+        }
+        
+        function activatePulse(type) {
+            if (!ws || !gameState) return;
+            
+            // Pulses affect the whole flock
+            ws.send(JSON.stringify({
+                type: 'activate_pulse',
+                pulse: type
+            }));
+            
+            // Visual feedback
+            canvas.style.animation = 'pulse 0.5s';
+            setTimeout(() => {
+                canvas.style.animation = '';
+            }, 500);
+        }
+        
+        function togglePause() {
+            if (!ws) return;
+            isPaused = !isPaused;
+            document.getElementById('pause-btn').textContent = isPaused ? '▶️ Resume' : '⏸️ Pause';
+            ws.send(JSON.stringify({
+                type: 'set_speed',
+                speed: isPaused ? 0 : 1
+            }));
+        }
+        
+        function setSpeed(speed) {
+            if (!ws) return;
+            ws.send(JSON.stringify({
+                type: 'set_speed',
+                speed: speed
+            }));
+        }
+        
+        function toggleOverlay(type) {
+            // TODO: Implement overlay visualizations
+            console.log('Toggle overlay:', type);
+        }
+        
+        function selectBeaconType(type) {
+            document.querySelector(`[data-beacon="${type}"]`).click();
+        }
+        
+        // Animation loop for smooth rendering
+        function animate() {
+            if (gameState) {
+                renderGame(gameState);
+            }
+            requestAnimationFrame(animate);
+        }
+        animate();
+        
+        // Show instructions
+        console.log(`
+🎮 HOW TO PLAY MURMURATION:
+============================
+1. Click "Connect" then "Start Level"
+2. Select a beacon type (1-4 keys)
+3. Click on canvas to place beacon
+4. Right-click to remove beacon
+5. Use Q/W/E for pulse abilities
+6. Space to pause
+7. Guide birds to destination!
+
+OBJECTIVES:
+- Minimize bird losses (< 20)
+- Maintain flock cohesion (> 0.6)
+- Reach migration destination
+
+TIPS:
+- Place food beacons when energy is low
+- Use shelter near predators
+- Thermal lifts save energy
+- Pulses can save birds from danger
+        `);
+    </script>
+</body>
+</html>

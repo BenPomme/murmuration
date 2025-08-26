@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Murmuration Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            font-size: 3em;
+            margin-bottom: 0.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .status {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background: white;
+            color: #667eea;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #canvas {
+            width: 100%;
+            height: 600px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            position: relative;
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .metric {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        #log {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .connected {
+            color: #4ade80;
+        }
+        .disconnected {
+            color: #f87171;
+        }
+        .info {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦅 Murmuration</h1>
+        <p style="text-align: center; opacity: 0.9;">Influence-not-control evolution sandbox</p>
+        
+        <div class="status">
+            <div>WebSocket Status: <span id="ws-status" class="disconnected">Disconnected</span></div>
+            <div>Server: ws://localhost:8765</div>
+        </div>
+
+        <div class="controls">
+            <button id="connect-btn" onclick="connect()">Connect</button>
+            <button id="load-btn" onclick="loadLevel()" disabled>Load Level W1-1</button>
+            <button id="pause-btn" onclick="togglePause()" disabled>Pause</button>
+            <button id="speed-btn" onclick="cycleSpeed()" disabled>Speed: 1x</button>
+        </div>
+
+        <div id="canvas">
+            <canvas id="gameCanvas" width="1200" height="600"></canvas>
+        </div>
+
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-label">Population</div>
+                <div class="metric-value" id="population">0</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Arrivals</div>
+                <div class="metric-value" id="arrivals">0</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Losses</div>
+                <div class="metric-value" id="losses">0</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Cohesion</div>
+                <div class="metric-value" id="cohesion">0.00</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Season Day</div>
+                <div class="metric-value" id="season">0</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Tick</div>
+                <div class="metric-value" id="tick">0</div>
+            </div>
+        </div>
+
+        <div class="info">
+            <h3>How to Use:</h3>
+            <ol>
+                <li>Start the server: <code>python -m sim.cli.main serve</code></li>
+                <li>Click "Connect" to establish WebSocket connection</li>
+                <li>Click "Load Level W1-1" to start the simulation</li>
+                <li>Use Pause and Speed controls to control simulation</li>
+            </ol>
+        </div>
+
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isPaused = false;
+        let speed = 1;
+        const speeds = [0, 1, 2, 4];
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Resize canvas to fit container
+        function resizeCanvas() {
+            const container = document.getElementById('canvas');
+            canvas.width = container.clientWidth;
+            canvas.height = 600;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#f87171' : type === 'success' ? '#4ade80' : '#fbbf24';
+            logDiv.innerHTML = `<div style="color: ${color}">[${time}] ${message}</div>` + logDiv.innerHTML;
+        }
+        
+        function connect() {
+            if (ws) {
+                ws.close();
+                return;
+            }
+            
+            log('Connecting to WebSocket server...');
+            ws = new WebSocket('ws://localhost:8765');
+            
+            ws.onopen = () => {
+                log('Connected to server!', 'success');
+                document.getElementById('ws-status').textContent = 'Connected';
+                document.getElementById('ws-status').className = 'connected';
+                document.getElementById('connect-btn').textContent = 'Disconnect';
+                document.getElementById('load-btn').disabled = false;
+            };
+            
+            ws.onclose = () => {
+                log('Disconnected from server');
+                document.getElementById('ws-status').textContent = 'Disconnected';
+                document.getElementById('ws-status').className = 'disconnected';
+                document.getElementById('connect-btn').textContent = 'Connect';
+                document.getElementById('load-btn').disabled = true;
+                document.getElementById('pause-btn').disabled = true;
+                document.getElementById('speed-btn').disabled = true;
+                ws = null;
+            };
+            
+            ws.onerror = (error) => {
+                log('WebSocket error: ' + error.message, 'error');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleMessage(message);
+                } catch (e) {
+                    log('Failed to parse message: ' + e.message, 'error');
+                }
+            };
+        }
+        
+        function handleMessage(message) {
+            if (message.type === 'state_update') {
+                updateMetrics(message.data);
+                renderAgents(message.data.agents);
+                
+                // Enable controls after level loads
+                if (message.data.tick > 0) {
+                    document.getElementById('pause-btn').disabled = false;
+                    document.getElementById('speed-btn').disabled = false;
+                }
+            }
+        }
+        
+        function updateMetrics(data) {
+            document.getElementById('population').textContent = data.population || 0;
+            document.getElementById('arrivals').textContent = data.arrivals || 0;
+            document.getElementById('losses').textContent = data.losses || 0;
+            document.getElementById('cohesion').textContent = (data.cohesion || 0).toFixed(2);
+            document.getElementById('season').textContent = data.season?.day || 0;
+            document.getElementById('tick').textContent = data.tick || 0;
+        }
+        
+        function renderAgents(agents) {
+            // Clear canvas
+            ctx.fillStyle = 'rgba(20, 20, 40, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw agents
+            if (!agents) return;
+            
+            agents.forEach(agent => {
+                if (!agent.alive) return;
+                
+                // Map agent position to canvas
+                const x = (agent.x / 2000) * canvas.width;
+                const y = (agent.y / 1200) * canvas.height;
+                
+                // Color based on energy
+                const energy = agent.energy / 100;
+                const hue = energy * 120; // Green when high, red when low
+                
+                // Draw agent as glowing dot
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = `hsla(${hue}, 70%, 60%, 0.8)`;
+                ctx.fill();
+                
+                // Draw velocity vector
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + agent.vx * 2, y + agent.vy * 2);
+                ctx.strokeStyle = `hsla(${hue}, 70%, 60%, 0.3)`;
+                ctx.stroke();
+            });
+        }
+        
+        function loadLevel() {
+            if (!ws) return;
+            
+            log('Loading level W1-1...');
+            ws.send(JSON.stringify({
+                type: 'load_level',
+                level: 'W1-1'
+            }));
+        }
+        
+        function togglePause() {
+            if (!ws) return;
+            
+            isPaused = !isPaused;
+            document.getElementById('pause-btn').textContent = isPaused ? 'Resume' : 'Pause';
+            
+            ws.send(JSON.stringify({
+                type: 'set_speed',
+                speed: isPaused ? 0 : speed
+            }));
+            
+            log(isPaused ? 'Simulation paused' : 'Simulation resumed');
+        }
+        
+        function cycleSpeed() {
+            if (!ws || isPaused) return;
+            
+            const currentIndex = speeds.indexOf(speed);
+            const nextIndex = (currentIndex + 1) % (speeds.length - 1) + 1; // Skip 0 (pause)
+            speed = speeds[nextIndex];
+            
+            document.getElementById('speed-btn').textContent = `Speed: ${speed}x`;
+            
+            ws.send(JSON.stringify({
+                type: 'set_speed',
+                speed: speed
+            }));
+            
+            log(`Speed set to ${speed}x`);
+        }
+        
+        // Auto-connect on load
+        window.addEventListener('load', () => {
+            log('Demo page loaded. Click Connect to start.');
+        });
+    </script>
+</body>
+</html>

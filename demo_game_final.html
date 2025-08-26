@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Murmuration - The Complete Game</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        /* Header */
+        .header {
+            background: #16213e;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+            flex-shrink: 0;
+            min-height: 60px;
+        }
+        
+        .title { 
+            font-size: 24px; 
+            font-weight: bold;
+        }
+        
+        .level-info {
+            font-size: 18px;
+            color: #4fbdba;
+        }
+        
+        .metrics {
+            display: flex;
+            gap: 30px;
+        }
+        
+        .metric {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        /* Main game area */
+        .game-area {
+            flex: 1;
+            display: flex;
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+        }
+        
+        /* Canvas */
+        #gameCanvas {
+            flex: 1;
+            background: linear-gradient(to bottom, #87CEEB, #98D8E8);
+        }
+        
+        /* Side panel */
+        .side-panel {
+            width: 300px;
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section h3 {
+            margin-bottom: 10px;
+            color: #4fbdba;
+        }
+        
+        /* Beacons */
+        .beacon-btn {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #0f3460;
+            color: white;
+            border: 2px solid transparent;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .beacon-btn:hover {
+            background: #1e5f8e;
+        }
+        
+        .beacon-btn.selected {
+            border-color: #4fbdba;
+            background: #1e5f8e;
+        }
+        
+        .beacon-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Pulses */
+        .pulse-btn {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .pulse-btn:hover:not(:disabled) {
+            background: #ff4666;
+        }
+        
+        .pulse-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Game status */
+        .status {
+            padding: 10px;
+            background: #0f3460;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .status.victory {
+            background: #4fbdba;
+            color: #16213e;
+            animation: pulse 1s infinite;
+        }
+        
+        .status.defeat {
+            background: #e94560;
+            animation: shake 0.5s;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        /* Instructions */
+        .instructions {
+            font-size: 12px;
+            color: #888;
+            line-height: 1.5;
+        }
+        
+        /* Connection status */
+        .connection {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        
+        .connected { color: #4fbdba; }
+        .disconnected { color: #e94560; }
+        
+        /* Bottom controls */
+        .controls {
+            background: #16213e;
+            padding: 10px 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            border-top: 2px solid #0f3460;
+            flex-shrink: 0;
+            min-height: 50px;
+            z-index: 10;
+        }
+        
+        button, select {
+            padding: 8px 16px;
+            background: #0f3460;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        button:hover:not(:disabled), select:hover:not(:disabled) {
+            background: #1e5f8e;
+        }
+        
+        button:disabled, select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        button.primary {
+            background: #4fbdba;
+            color: #16213e;
+            font-weight: bold;
+        }
+        
+        button.success {
+            background: #4ade80;
+            color: #16213e;
+        }
+        
+        /* Game over overlay */
+        .game-over-overlay {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(22, 33, 62, 0.95);
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #4fbdba;
+            text-align: center;
+            z-index: 100;
+        }
+        
+        .game-over-overlay.show {
+            display: block;
+        }
+        
+        .game-over-title {
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+        
+        .game-over-stats {
+            margin: 20px 0;
+            font-size: 18px;
+        }
+        
+        .game-over-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">🦅 MURMURATION</div>
+        <div class="level-info" id="level-name">No Level Loaded</div>
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value" id="population">0</div>
+                <div class="metric-label">BIRDS</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="arrivals" style="color: #4fbdba">0</div>
+                <div class="metric-label">SAVED</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="losses" style="color: #e94560">0</div>
+                <div class="metric-label">LOST</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="timer">2:00</div>
+                <div class="metric-label">TIME</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="game-area">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="side-panel">
+            <div class="section">
+                <h3>🎯 OBJECTIVE</h3>
+                <div class="status" id="status">
+                    Select a level and start playing!
+                </div>
+                <div class="instructions" id="objectives">
+                    Goal: <span id="goal-text">-</span><br>
+                    Max Losses: <span id="max-losses">-</span>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>🔆 BEACONS (<span id="beacon-count">0</span>)</h3>
+                <button class="beacon-btn" data-beacon="food">
+                    🍎 FOOD - Attracts & energizes
+                </button>
+                <button class="beacon-btn" data-beacon="shelter">
+                    🛡️ SHELTER - Reduces stress
+                </button>
+                <button class="beacon-btn" data-beacon="thermal">
+                    🌀 THERMAL - Boosts forward
+                </button>
+                <div class="instructions">
+                    Click beacon, then click map to place<br>
+                    Right-click beacon to remove
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>⚡ EMERGENCY PULSES</h3>
+                <button class="pulse-btn" onclick="activatePulse('gather')">
+                    GATHER [Q] - Pull together
+                </button>
+                <button class="pulse-btn" onclick="activatePulse('scatter')">
+                    SCATTER [W] - Spread out
+                </button>
+                <button class="pulse-btn" onclick="activatePulse('boost')">
+                    BOOST [E] - Speed forward
+                </button>
+                <div class="instructions">
+                    5 second cooldown
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>⚠️ CONTROLS</h3>
+                <div class="instructions">
+                    SPACE - Pause/Resume<br>
+                    R - Restart Level<br>
+                    N - Next Level (after win)<br>
+                    1-3 - Select beacon type<br>
+                    Q/W/E - Activate pulses
+                </div>
+            </div>
+        </div>
+        
+        <div class="connection" id="connection">
+            <span id="conn-status">Disconnected</span>
+        </div>
+        
+        <!-- Game Over Overlay -->
+        <div class="game-over-overlay" id="game-over">
+            <div class="game-over-title" id="game-over-title">LEVEL COMPLETE!</div>
+            <div class="game-over-stats">
+                <div>Birds Saved: <span id="final-saved">0</span></div>
+                <div>Birds Lost: <span id="final-lost">0</span></div>
+                <div>Time: <span id="final-time">0:00</span></div>
+            </div>
+            <div class="game-over-buttons">
+                <button onclick="restartLevel()" class="primary">RETRY LEVEL</button>
+                <button onclick="nextLevel()" class="success" id="next-btn">NEXT LEVEL</button>
+                <button onclick="selectNewLevel()">LEVEL SELECT</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="connect-btn" onclick="connect()" class="primary">CONNECT</button>
+        <select id="level-select" disabled>
+            <optgroup label="Easy">
+                <option value="W1-1">W1-1: First Flight</option>
+                <option value="W1-2">W1-2: Predator Valley</option>
+            </optgroup>
+            <optgroup label="Medium">
+                <option value="W2-1">W2-1: Storm Front</option>
+                <option value="W2-2">W2-2: The Gauntlet</option>
+            </optgroup>
+            <optgroup label="Hard">
+                <option value="W3-1">W3-1: Migration Marathon</option>
+                <option value="W3-2">W3-2: Apex Predators</option>
+            </optgroup>
+            <optgroup label="Expert">
+                <option value="W4-1">W4-1: Perfect Storm</option>
+            </optgroup>
+            <optgroup label="Bonus">
+                <option value="BONUS-1">Speed Run (30s)</option>
+                <option value="BONUS-2">No Beacons Challenge</option>
+            </optgroup>
+        </select>
+        <button id="start-btn" onclick="startGame()" disabled>START LEVEL</button>
+        <button id="restart-btn" onclick="restartLevel()" disabled>RESTART</button>
+        <button id="pause-btn" onclick="togglePause()" disabled>PAUSE</button>
+        <span style="margin: 0 10px;">|</span>
+        <button onclick="setSpeed(0.5)">0.5x</button>
+        <button onclick="setSpeed(1)" class="primary">1x</button>
+        <button onclick="setSpeed(2)">2x</button>
+        <button onclick="setSpeed(4)">4x</button>
+    </div>
+    
+    <script>
+        // Game state
+        let ws = null;
+        let gameState = null;
+        let selectedBeacon = null;
+        let beaconBudget = 4;
+        let placedBeacons = [];
+        let isPaused = false;
+        let pulseReady = true;
+        let currentLevel = 'W1-1';
+        let levelData = {};
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Level progression
+        const levelOrder = ['W1-1', 'W1-2', 'W2-1', 'W2-2', 'W3-1', 'W3-2', 'W4-1'];
+        
+        // Level names for display
+        const levelNames = {
+            'W1-1': 'First Flight',
+            'W1-2': 'Predator Valley',
+            'W2-1': 'Storm Front',
+            'W2-2': 'The Gauntlet',
+            'W3-1': 'Migration Marathon',
+            'W3-2': 'Apex Predators',
+            'W4-1': 'Perfect Storm',
+            'BONUS-1': 'Speed Run Challenge',
+            'BONUS-2': 'No Beacon Challenge'
+        };
+        
+        // Resize canvas
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Beacon selection
+        document.querySelectorAll('.beacon-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (beaconBudget <= 0) return;
+                document.querySelectorAll('.beacon-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                selectedBeacon = btn.dataset.beacon;
+            });
+        });
+        
+        // Canvas click for beacon placement
+        canvas.addEventListener('click', (e) => {
+            if (!selectedBeacon || beaconBudget <= 0 || !gameState || gameState.game_over) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width * 2000;
+            const y = (e.clientY - rect.top) / rect.height * 1200;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'place_beacon',
+                    beacon: { type: selectedBeacon, x: x, y: y }
+                }));
+                
+                placedBeacons.push({ type: selectedBeacon, x: x, y: y });
+                beaconBudget--;
+                document.getElementById('beacon-count').textContent = beaconBudget;
+                
+                // Reset selection
+                document.querySelectorAll('.beacon-btn').forEach(b => b.classList.remove('selected'));
+                selectedBeacon = null;
+            }
+        });
+        
+        // Right click to remove beacon
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (!gameState || gameState.game_over) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width * 2000;
+            const y = (e.clientY - rect.top) / rect.height * 1200;
+            
+            // Find closest beacon
+            let closest = null;
+            let minDist = 100;
+            
+            placedBeacons.forEach((beacon, idx) => {
+                const dist = Math.sqrt(Math.pow(beacon.x - x, 2) + Math.pow(beacon.y - y, 2));
+                if (dist < minDist) {
+                    minDist = dist;
+                    closest = idx;
+                }
+            });
+            
+            if (closest !== null) {
+                placedBeacons.splice(closest, 1);
+                beaconBudget++;
+                document.getElementById('beacon-count').textContent = beaconBudget;
+                // TODO: Send remove beacon message
+            }
+        });
+        
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'q': activatePulse('gather'); break;
+                case 'w': activatePulse('scatter'); break;
+                case 'e': activatePulse('boost'); break;
+                case ' ': e.preventDefault(); togglePause(); break;
+                case 'r': restartLevel(); break;
+                case 'n': if (gameState && gameState.victory) nextLevel(); break;
+                case '1': document.querySelector('[data-beacon="food"]').click(); break;
+                case '2': document.querySelector('[data-beacon="shelter"]').click(); break;
+                case '3': document.querySelector('[data-beacon="thermal"]').click(); break;
+            }
+        });
+        
+        function connect() {
+            if (ws) {
+                ws.close();
+                return;
+            }
+            
+            ws = new WebSocket('ws://localhost:8765');
+            
+            ws.onopen = () => {
+                document.getElementById('conn-status').textContent = 'Connected';
+                document.getElementById('connection').className = 'connection connected';
+                document.getElementById('connect-btn').textContent = 'DISCONNECT';
+                document.getElementById('level-select').disabled = false;
+                document.getElementById('start-btn').disabled = false;
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('conn-status').textContent = 'Disconnected';
+                document.getElementById('connection').className = 'connection disconnected';
+                document.getElementById('connect-btn').textContent = 'CONNECT';
+                document.getElementById('level-select').disabled = true;
+                document.getElementById('start-btn').disabled = true;
+                document.getElementById('restart-btn').disabled = true;
+                document.getElementById('pause-btn').disabled = true;
+                ws = null;
+            };
+            
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'state_update') {
+                    gameState = msg.data;
+                    updateGame();
+                    renderGame();
+                }
+            };
+        }
+        
+        function startGame() {
+            if (!ws) return;
+            
+            currentLevel = document.getElementById('level-select').value;
+            
+            // Reset game state
+            placedBeacons = [];
+            isPaused = false;
+            document.getElementById('game-over').classList.remove('show');
+            
+            // Load level
+            ws.send(JSON.stringify({ type: 'load_level', level: currentLevel }));
+            
+            // Update UI
+            document.getElementById('level-name').textContent = `Level: ${currentLevel} - ${levelNames[currentLevel] || 'Custom'}`;
+            document.getElementById('pause-btn').disabled = false;
+            document.getElementById('restart-btn').disabled = false;
+            document.getElementById('pause-btn').textContent = 'PAUSE';
+        }
+        
+        function restartLevel() {
+            if (!ws || !currentLevel) return;
+            startGame(); // Just reload the same level
+        }
+        
+        function nextLevel() {
+            if (!ws) return;
+            
+            const currentIdx = levelOrder.indexOf(currentLevel);
+            if (currentIdx >= 0 && currentIdx < levelOrder.length - 1) {
+                currentLevel = levelOrder[currentIdx + 1];
+                document.getElementById('level-select').value = currentLevel;
+                startGame();
+            }
+        }
+        
+        function selectNewLevel() {
+            document.getElementById('game-over').classList.remove('show');
+        }
+        
+        function updateGame() {
+            if (!gameState) return;
+            
+            // Update metrics
+            document.getElementById('population').textContent = gameState.population || 0;
+            document.getElementById('arrivals').textContent = gameState.arrivals || 0;
+            document.getElementById('losses').textContent = gameState.losses || 0;
+            
+            // Update objectives based on level
+            const targetArrivals = levelData[currentLevel]?.target_arrivals || gameState.target_arrivals || 80;
+            const maxLosses = levelData[currentLevel]?.max_losses || gameState.max_losses || 20;
+            document.getElementById('goal-text').textContent = `Save ${targetArrivals}+ birds`;
+            document.getElementById('max-losses').textContent = `${maxLosses} birds`;
+            
+            // Update timer
+            const time = gameState.time_remaining || 120;
+            const mins = Math.floor(time / 60);
+            const secs = Math.floor(time % 60);
+            document.getElementById('timer').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            
+            // Update beacon count
+            if (gameState.beacon_budget !== undefined) {
+                beaconBudget = gameState.beacon_budget;
+                document.getElementById('beacon-count').textContent = beaconBudget;
+            }
+            
+            // Handle game over
+            if (gameState.game_over && !document.getElementById('game-over').classList.contains('show')) {
+                const overlay = document.getElementById('game-over');
+                overlay.classList.add('show');
+                
+                if (gameState.victory) {
+                    document.getElementById('game-over-title').textContent = '🎉 VICTORY! 🎉';
+                    document.getElementById('game-over-title').style.color = '#4fbdba';
+                    document.getElementById('next-btn').style.display = 'inline-block';
+                } else {
+                    document.getElementById('game-over-title').textContent = '💔 DEFEAT';
+                    document.getElementById('game-over-title').style.color = '#e94560';
+                    document.getElementById('next-btn').style.display = 'none';
+                }
+                
+                document.getElementById('final-saved').textContent = gameState.arrivals;
+                document.getElementById('final-lost').textContent = gameState.losses;
+                document.getElementById('final-time').textContent = document.getElementById('timer').textContent;
+                
+                // Auto-pause
+                isPaused = true;
+                document.getElementById('pause-btn').textContent = 'PAUSED';
+            }
+        }
+        
+        function renderGame() {
+            if (!gameState) return;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Scale factors
+            const scaleX = canvas.width / 2000;
+            const scaleY = canvas.height / 1200;
+            
+            // Draw destination zone (green)
+            if (gameState.destination) {
+                const [dx, dy, dr] = gameState.destination;
+                ctx.fillStyle = 'rgba(74, 222, 128, 0.3)';
+                ctx.strokeStyle = '#4ade80';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(dx * scaleX, dy * scaleY, dr * scaleX, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                ctx.fillStyle = '#4ade80';
+                ctx.font = 'bold 20px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('DESTINATION', dx * scaleX, dy * scaleY - dr * scaleX - 10);
+            }
+            
+            // Draw start zone (blue)
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(200 * scaleX, 600 * scaleY, 100 * scaleX, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Draw hazards
+            if (gameState.hazards) {
+                gameState.hazards.forEach(hazard => {
+                    if (hazard.type === 'storm') {
+                        ctx.fillStyle = 'rgba(107, 114, 128, 0.4)';
+                        ctx.strokeStyle = '#6b7280';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(hazard.x * scaleX, hazard.y * scaleY, hazard.radius * scaleX, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+                        
+                        ctx.fillStyle = '#6b7280';
+                        ctx.font = '30px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('🌪️', hazard.x * scaleX, hazard.y * scaleY + 10);
+                    } else if (hazard.type === 'predator') {
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+                        ctx.strokeStyle = '#ef4444';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]);
+                        ctx.beginPath();
+                        ctx.arc(hazard.x * scaleX, hazard.y * scaleY, hazard.radius * scaleX, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                        
+                        const icon = hazard.alpha ? '🦅' : '🦅';
+                        const size = hazard.alpha ? '35px' : '25px';
+                        ctx.fillStyle = '#ef4444';
+                        ctx.font = size + ' Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(icon, hazard.x * scaleX, hazard.y * scaleY + 8);
+                    }
+                });
+            }
+            
+            // Draw placed beacons
+            placedBeacons.forEach(beacon => {
+                ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
+                ctx.strokeStyle = '#fbbf24';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(beacon.x * scaleX, beacon.y * scaleY, 150 * scaleX, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                
+                const icon = beacon.type === 'food' ? '🍎' : beacon.type === 'shelter' ? '🛡️' : '🌀';
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(icon, beacon.x * scaleX, beacon.y * scaleY + 7);
+            });
+            
+            // Draw birds
+            if (gameState.agents) {
+                gameState.agents.forEach(agent => {
+                    const x = agent.x * scaleX;
+                    const y = agent.y * scaleY;
+                    
+                    // Bird color based on energy
+                    const energy = agent.energy / 100;
+                    const r = Math.floor(255 * (1 - energy));
+                    const g = Math.floor(255 * energy);
+                    
+                    ctx.save();
+                    ctx.translate(x, y);
+                    const angle = Math.atan2(agent.vy, agent.vx);
+                    ctx.rotate(angle);
+                    
+                    ctx.fillStyle = `rgb(${r}, ${g}, 100)`;
+                    ctx.beginPath();
+                    ctx.moveTo(8, 0);
+                    ctx.lineTo(-4, -4);
+                    ctx.lineTo(-4, 4);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    if (agent.stress > 0.7) {
+                        ctx.strokeStyle = 'red';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                    
+                    ctx.restore();
+                });
+            }
+        }
+        
+        function activatePulse(type) {
+            if (!ws || !pulseReady || !gameState || gameState.game_over) return;
+            
+            ws.send(JSON.stringify({ type: 'activate_pulse', pulse: type }));
+            
+            // Cooldown
+            pulseReady = false;
+            document.querySelectorAll('.pulse-btn').forEach(btn => btn.disabled = true);
+            
+            setTimeout(() => {
+                pulseReady = true;
+                document.querySelectorAll('.pulse-btn').forEach(btn => btn.disabled = false);
+            }, 5000);
+        }
+        
+        function togglePause() {
+            if (!ws || !gameState) return;
+            isPaused = !isPaused;
+            document.getElementById('pause-btn').textContent = isPaused ? 'RESUME' : 'PAUSE';
+            ws.send(JSON.stringify({ type: 'set_speed', speed: isPaused ? 0 : 1 }));
+        }
+        
+        function setSpeed(speed) {
+            if (!ws || isPaused) return;
+            ws.send(JSON.stringify({ type: 'set_speed', speed: speed }));
+        }
+        
+        // Load level data
+        fetch('/levels/levels.json')
+            .then(r => r.json())
+            .then(data => { levelData = data; })
+            .catch(() => { console.log('Could not load level data'); });
+        
+        // Animation loop
+        function animate() {
+            renderGame();
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+</body>
+</html>

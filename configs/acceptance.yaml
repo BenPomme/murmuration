@@ -1,0 +1,28 @@
+seeds: [101, 202, 303]
+levels:
+  W1-1:
+    arrivals_min: 70
+    cohesion_avg_min: 0.55
+    losses_max: 20
+    wall_time_s_max: 420
+  W1-2:
+    arrivals_min: 90
+    cohesion_avg_min: 0.58
+    losses_max: 25
+    wall_time_s_max: 420
+  W1-3:
+    arrivals_min: 100
+    cohesion_avg_min: 0.60
+    losses_max: 22
+    wall_time_s_max: 420
+  W1-4:
+    arrivals_min: 110
+    cohesion_avg_min: 0.62
+    losses_max: 22
+    wall_time_s_max: 480
+  W3-4:
+    arrivals_min: 160
+    cohesion_avg_min: 0.68
+    losses_max: 22
+    protected_deaths_max: 20
+    wall_time_s_max: 600

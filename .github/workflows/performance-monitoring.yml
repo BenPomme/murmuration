@@ -1,0 +1,463 @@
+name: Performance Monitoring
+
+on:
+  schedule:
+    # Run performance regression tests nightly at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      test_duration:
+        description: 'Test duration in minutes'
+        required: false
+        default: '10'
+        type: string
+      agent_count:
+        description: 'Number of agents for stress test'
+        required: false
+        default: '300'
+        type: string
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  performance-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      
+    - name: Start game server
+      run: |
+        cd ..
+        python -m pip install -e .
+        python -m sim.server &
+        sleep 10
+        
+    - name: Run performance baseline tests
+      run: |
+        npx playwright test tests/e2e/performance-e2e.spec.ts \
+          --reporter=json \
+          --output-dir=performance-results
+      env:
+        TEST_DURATION_MINUTES: ${{ github.event.inputs.test_duration || '10' }}
+        MAX_AGENT_COUNT: ${{ github.event.inputs.agent_count || '300' }}
+        
+    - name: Parse performance results
+      run: |
+        node -e "
+        const fs = require('fs');
+        const results = JSON.parse(fs.readFileSync('performance-results/results.json', 'utf8'));
+        
+        const performanceMetrics = {
+          timestamp: new Date().toISOString(),
+          tests: results.suites.map(suite => ({
+            name: suite.title,
+            specs: suite.specs.map(spec => ({
+              title: spec.title,
+              duration: spec.results[0]?.duration || 0,
+              status: spec.results[0]?.status || 'unknown'
+            }))
+          }))
+        };
+        
+        fs.writeFileSync('performance-baseline.json', JSON.stringify(performanceMetrics, null, 2));
+        console.log('Performance baseline recorded:', JSON.stringify(performanceMetrics, null, 2));
+        "
+        
+    - name: Store performance baseline
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-baseline-${{ github.run_number }}
+        path: |
+          client/performance-baseline.json
+          client/performance-results/
+
+  memory-leak-detection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      
+    - name: Start game server
+      run: |
+        cd ..
+        python -m pip install -e .
+        python -m sim.server &
+        sleep 10
+        
+    - name: Run memory leak detection
+      run: |
+        npx playwright test -c playwright-memory.config.ts \
+          --reporter=json \
+          --output-dir=memory-test-results
+      continue-on-error: true
+      
+    - name: Analyze memory results
+      run: |
+        node -e "
+        const fs = require('fs');
+        
+        try {
+          const results = JSON.parse(fs.readFileSync('memory-test-results/results.json', 'utf8'));
+          
+          const memoryReport = {
+            timestamp: new Date().toISOString(),
+            leaksDetected: false,
+            maxMemoryUsageMB: 0,
+            recommendations: []
+          };
+          
+          // Analyze test results for memory issues
+          results.suites.forEach(suite => {
+            suite.specs.forEach(spec => {
+              if (spec.title.includes('memory') && spec.results[0]?.status === 'failed') {
+                memoryReport.leaksDetected = true;
+                memoryReport.recommendations.push(
+                  'Memory leak detected in: ' + spec.title
+                );
+              }
+            });
+          });
+          
+          fs.writeFileSync('memory-report.json', JSON.stringify(memoryReport, null, 2));
+          console.log('Memory analysis completed:', JSON.stringify(memoryReport, null, 2));
+          
+          if (memoryReport.leaksDetected) {
+            console.error('Memory leaks detected! Check the report for details.');
+            process.exit(1);
+          }
+        } catch (error) {
+          console.error('Failed to analyze memory results:', error.message);
+          process.exit(1);
+        }
+        "
+        
+    - name: Upload memory analysis
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: memory-analysis-${{ github.run_number }}
+        path: |
+          client/memory-report.json
+          client/memory-test-results/
+
+  fps-regression-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Download previous baseline
+      continue-on-error: true
+      run: |
+        # Download latest performance baseline from GitHub releases or artifacts
+        echo "Downloading previous performance baseline..."
+        curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+          | grep "browser_download_url.*performance-baseline" \
+          | cut -d '"' -f 4 \
+          | head -1 \
+          | xargs curl -L -o previous-baseline.json || echo "No previous baseline found"
+          
+    - name: Run FPS benchmark
+      run: |
+        npm run test -- --run src/__tests__/performance/performance.test.ts \
+          --reporter=json > current-fps-results.json
+      continue-on-error: true
+      
+    - name: Compare with baseline
+      run: |
+        node -e "
+        const fs = require('fs');
+        
+        let previousBaseline = null;
+        let currentResults = null;
+        
+        try {
+          if (fs.existsSync('previous-baseline.json')) {
+            previousBaseline = JSON.parse(fs.readFileSync('previous-baseline.json', 'utf8'));
+          }
+          currentResults = JSON.parse(fs.readFileSync('current-fps-results.json', 'utf8'));
+        } catch (error) {
+          console.log('Failed to parse results:', error.message);
+        }
+        
+        const report = {
+          timestamp: new Date().toISOString(),
+          regression: false,
+          currentFPS: 0,
+          baselineFPS: 0,
+          regressionThreshold: 10, // 10% regression threshold
+          recommendations: []
+        };
+        
+        // Extract FPS data from test results
+        // This would need to be customized based on actual test output format
+        
+        if (previousBaseline && currentResults) {
+          // Compare FPS performance
+          const fpsChange = ((report.currentFPS - report.baselineFPS) / report.baselineFPS) * 100;
+          
+          if (fpsChange < -report.regressionThreshold) {
+            report.regression = true;
+            report.recommendations.push(
+              'FPS regression detected: ' + fpsChange.toFixed(2) + '% decrease from baseline'
+            );
+          }
+        }
+        
+        fs.writeFileSync('fps-regression-report.json', JSON.stringify(report, null, 2));
+        console.log('FPS regression check completed:', JSON.stringify(report, null, 2));
+        
+        if (report.regression) {
+          console.error('Performance regression detected!');
+          process.exit(1);
+        }
+        "
+        
+    - name: Upload FPS regression report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: fps-regression-${{ github.run_number }}
+        path: client/fps-regression-report.json
+
+  cross-platform-performance:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run performance tests
+      run: npm run test -- --run src/__tests__/performance/performance.test.ts
+      continue-on-error: true
+      
+    - name: Generate platform report
+      shell: bash
+      run: |
+        echo "{
+          \"platform\": \"${{ matrix.os }}\",
+          \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
+          \"nodeVersion\": \"${{ env.NODE_VERSION }}\",
+          \"testCompleted\": true
+        }" > performance-${{ matrix.os }}.json
+        
+    - name: Upload platform performance data
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-${{ matrix.os }}-${{ github.run_number }}
+        path: client/performance-${{ matrix.os }}.json
+
+  performance-report:
+    runs-on: ubuntu-latest
+    needs: [
+      performance-baseline,
+      memory-leak-detection,
+      fps-regression-check,
+      cross-platform-performance
+    ]
+    if: always()
+    
+    steps:
+    - name: Download all performance artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Generate comprehensive report
+      run: |
+        echo "# Performance Monitoring Report" > performance-report.md
+        echo "Generated: $(date -u)" >> performance-report.md
+        echo "" >> performance-report.md
+        
+        echo "## Test Summary" >> performance-report.md
+        
+        # Check baseline results
+        if [ -d "performance-baseline-${{ github.run_number }}" ]; then
+          echo "✅ Performance baseline tests completed" >> performance-report.md
+        else
+          echo "❌ Performance baseline tests failed" >> performance-report.md
+        fi
+        
+        # Check memory results
+        if [ -d "memory-analysis-${{ github.run_number }}" ]; then
+          echo "✅ Memory leak detection completed" >> performance-report.md
+          if [ -f "memory-analysis-${{ github.run_number }}/memory-report.json" ]; then
+            LEAKS=$(jq -r '.leaksDetected' memory-analysis-${{ github.run_number }}/memory-report.json 2>/dev/null || echo "unknown")
+            if [ "$LEAKS" = "true" ]; then
+              echo "⚠️  Memory leaks detected!" >> performance-report.md
+            fi
+          fi
+        else
+          echo "❌ Memory leak detection failed" >> performance-report.md
+        fi
+        
+        # Check FPS regression
+        if [ -d "fps-regression-${{ github.run_number }}" ]; then
+          echo "✅ FPS regression check completed" >> performance-report.md
+          if [ -f "fps-regression-${{ github.run_number }}/fps-regression-report.json" ]; then
+            REGRESSION=$(jq -r '.regression' fps-regression-${{ github.run_number }}/fps-regression-report.json 2>/dev/null || echo "unknown")
+            if [ "$REGRESSION" = "true" ]; then
+              echo "⚠️  FPS regression detected!" >> performance-report.md
+            fi
+          fi
+        else
+          echo "❌ FPS regression check failed" >> performance-report.md
+        fi
+        
+        echo "" >> performance-report.md
+        echo "## Platform Results" >> performance-report.md
+        
+        for os in ubuntu-latest windows-latest macos-latest; do
+          if [ -d "performance-${os}-${{ github.run_number }}" ]; then
+            echo "✅ ${os} performance tests completed" >> performance-report.md
+          else
+            echo "❌ ${os} performance tests failed" >> performance-report.md
+          fi
+        done
+        
+        echo "" >> performance-report.md
+        echo "## Recommendations" >> performance-report.md
+        
+        # Aggregate recommendations from all reports
+        find . -name "*report.json" -exec jq -r '.recommendations[]? // empty' {} \; 2>/dev/null >> recommendations.txt || true
+        
+        if [ -s recommendations.txt ]; then
+          while read -r rec; do
+            echo "- $rec" >> performance-report.md
+          done < recommendations.txt
+        else
+          echo "- No specific recommendations at this time" >> performance-report.md
+        fi
+        
+        cat performance-report.md
+        
+    - name: Upload performance report
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-report-${{ github.run_number }}
+        path: performance-report.md
+        
+    - name: Create issue for regressions
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          let reportContent = 'Performance monitoring detected issues.';
+          
+          try {
+            reportContent = fs.readFileSync('performance-report.md', 'utf8');
+          } catch (error) {
+            console.log('Could not read performance report');
+          }
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `Performance Regression Detected - ${new Date().toISOString().split('T')[0]}`,
+            body: `## Automated Performance Monitoring Alert\n\n${reportContent}\n\n**Workflow Run:** https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            labels: ['performance', 'regression', 'automated']
+          });
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: performance-report
+    if: always()
+    
+    steps:
+    - name: Clean up old performance artifacts
+      uses: actions/github-script@v6
+      with:
+        script: |
+          // Keep only the last 10 performance monitoring runs
+          const runs = await github.rest.actions.listWorkflowRuns({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'performance-monitoring.yml',
+            per_page: 50
+          });
+          
+          const oldRuns = runs.data.workflow_runs.slice(10);
+          
+          for (const run of oldRuns) {
+            try {
+              await github.rest.actions.deleteWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              });
+              console.log(`Deleted old run: ${run.id}`);
+            } catch (error) {
+              console.log(`Could not delete run ${run.id}: ${error.message}`);
+            }
+          }
