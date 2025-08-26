@@ -66,6 +66,7 @@ export class GameScene extends Scene {
   // UI elements
   private infoText!: Phaser.GameObjects.Text;
   private connectionText!: Phaser.GameObjects.Text;
+  private lastConnectionStatus: boolean = false;
   private beaconPanel!: Phaser.GameObjects.Container;
   private selectedBeaconType: string | null = null;
   private beaconButtons: Map<string, Phaser.GameObjects.Container> = new Map();
@@ -125,6 +126,9 @@ export class GameScene extends Scene {
       padding: { x: 10, y: 5 },
       borderRadius: 5
     }).setScrollFactor(0).setDepth(100);
+
+    // Update connection status now that text element exists
+    this.setConnectionStatus(this.lastConnectionStatus);
     
     // Create controls info
     this.add.text(10, this.cameras.main.height - 120, 
@@ -228,12 +232,14 @@ export class GameScene extends Scene {
 
   public setConnectionStatus(connected: boolean) {
     console.log(`🎮 GameScene.setConnectionStatus called with: ${connected}`);
+    this.lastConnectionStatus = connected;
+    
     if (this.connectionText) {
       this.connectionText.setText(`Status: ${connected ? 'Connected' : 'Disconnected'}`);
       this.connectionText.setColor(connected ? '#00ff00' : '#ff0000');
       console.log(`🎮 Updated connection text to: ${connected ? 'Connected' : 'Disconnected'}`);
     } else {
-      console.log('⚠️ connectionText is null/undefined!');
+      console.log('⚠️ connectionText is null/undefined, storing status for later update');
     }
   }
 

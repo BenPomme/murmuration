@@ -148,9 +148,8 @@ export class WebSocketClient {
       type: 'place_beacon',
       beacon: {
         type: type,
-        position: [x, y],
-        strength: 50,  // Default strength
-        range: 30     // Default range
+        x: x,
+        y: y
       }
     });
   }
