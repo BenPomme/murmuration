@@ -165,8 +165,8 @@ class EvolvedSimulation:
                 self.rng.uniform(-2, 2)
             ])
             
-            # Apply breed traits
-            agent.energy = 100.0 * (1 + self.breed.energy_efficiency * 0.1)
+            # Apply breed traits - increased starting energy for better beacon timing
+            agent.energy = 300.0 * (1 + self.breed.energy_efficiency * 0.1)
             agent.stress = max(0, 0.2 - self.breed.stress_resilience * 0.2)
             
             # Add breed-specific attributes
@@ -288,6 +288,10 @@ class EvolvedSimulation:
                 is_night=(self.tick % 1800) > 900  # Day/night cycle: night from tick 900-1800
             )
             
+            # DEBUG: Log beacon contributions for first agent occasionally
+            if agent.id == 0 and self.tick % 120 == 0 and len(self.beacon_manager.beacons) > 0:
+                logger.info(f"🌟 BEACON: Agent {agent.id} - Contributions: {contributions}, Active beacons: {len(self.beacon_manager.beacons)}")
+            
             # Apply beacon effects with agent sensitivity
             beacon_response = agent.beacon_response
             
@@ -311,10 +315,19 @@ class EvolvedSimulation:
                     light_force = light_direction * contributions["light_attraction"] * beacon_response * 25 * dt
                     agent.velocity += light_force
             
-            # Sound beacon cohesion enhancement
+            # Sound beacon cohesion enhancement and shelter effects
             if contributions["cohesion_boost"] > 0:
                 # Enhanced flocking behavior near sound beacons
                 cohesion_strength = contributions["cohesion_boost"] * beacon_response
+                
+                # SHELTER EFFECT 1: Stress reduction
+                stress_reduction = cohesion_strength * 0.5 * dt
+                agent.stress = max(0, agent.stress - stress_reduction)
+                
+                # SHELTER EFFECT 2: Velocity slowing (for rest/shelter behavior)
+                slowing_factor = 1.0 - (cohesion_strength * 0.3)  # Up to 30% slower
+                agent.velocity *= slowing_factor
+                
                 # Apply stronger cohesion forces (already calculated above in step 1)
                 for other in alive_agents:
                     if other.id != agent.id:
@@ -330,10 +343,16 @@ class EvolvedSimulation:
                 for beacon in self.beacon_manager.beacons:
                     if beacon.beacon_type == BeaconType.FOOD_SCENT:
                         strength = beacon.get_field_strength(agent.position, Tick(self.tick))
+                        
                         if strength > 0.1:  # Within effective range
-                            # Energy restoration
-                            energy_gain = strength * beacon_response * 0.8 * dt
-                            agent.energy = min(100, agent.energy + energy_gain)
+                            # Energy restoration - increased multiplier from 0.8 to 20 for meaningful restoration
+                            energy_gain = strength * beacon_response * 20 * dt
+                            old_energy = agent.energy
+                            agent.energy = min(300, agent.energy + energy_gain)
+                            
+                            # DEBUG: Log energy restoration occasionally
+                            if agent.id == 0 and self.tick % 120 == 0:
+                                logger.info(f"🍯 ENERGY RESTORE: Agent {agent.id} - gain={energy_gain:.3f}, {old_energy:.1f}→{agent.energy:.1f}")
                             
                             # Attraction toward food source
                             to_beacon = beacon.position - agent.position
@@ -350,7 +369,7 @@ class EvolvedSimulation:
                 
                 # Small energy bonus from favorable winds
                 energy_gain = contributions["wind_boost"] * beacon_response * 0.4 * dt
-                agent.energy = min(100, agent.energy + energy_gain)
+                agent.energy = min(300, agent.energy + energy_gain)
             
             # 4. Advanced hazard responses
             for hazard in self.hazards:
@@ -421,8 +440,8 @@ class EvolvedSimulation:
                                 else:
                                     self.close_calls += 1
             
-            # 5. Energy management (breed efficiency)
-            base_consumption = 0.03 * self.breed.energy_efficiency
+            # 5. Energy management (breed efficiency) - reduced consumption for beacon timing
+            base_consumption = 0.01 * self.breed.energy_efficiency
             stress_consumption = 0.02 * agent.stress
             agent.energy = max(0, agent.energy - (base_consumption + stress_consumption))
             
@@ -444,11 +463,11 @@ class EvolvedSimulation:
             agent.position[0] = np.clip(agent.position[0], 0, 2000)
             agent.position[1] = np.clip(agent.position[1], 0, 1200)
             
-            # 9. Check arrival
+            # 9. Check arrival (birds reaching destination are marked as not alive but this is ARRIVAL, not death)
             if dist_to_dest < dest_r:
                 self.arrivals += 1
-                agent.alive = False
-                logger.info(f"Arrival! Total: {self.arrivals}/{self.config.target_arrivals}")
+                agent.alive = False  # Remove from simulation - they've reached safety!
+                logger.info(f"✅ SAFE ARRIVAL! Bird {agent.id} reached destination. Total: {self.arrivals}/{self.config.target_arrivals}")
                 
             if agent.alive:
                 alive_agents.append(agent)

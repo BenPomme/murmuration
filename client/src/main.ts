@@ -1,18 +1,24 @@
 import { Game, Types } from 'phaser';
 import { WebSocketClient } from './WebSocketClient';
 import { GameScene } from './GameScene';
+import { UIScene } from './UIScene';
+import { MenuScene } from './MenuScene';
 
 class MurmurationGame {
   private game: Game;
   private wsClient: WebSocketClient;
+  private menuScene: MenuScene;
   private gameScene: GameScene;
+  private uiScene: UIScene;
 
   constructor() {
     // Initialize WebSocket client
     this.wsClient = new WebSocketClient();
     
-    // Initialize Phaser game
+    // Initialize Phaser scenes
+    this.menuScene = new MenuScene();
     this.gameScene = new GameScene();
+    this.uiScene = new UIScene();
     
     // Calculate optimal dimensions for current screen
     const dimensions = this.calculateGameDimensions();
@@ -44,7 +50,7 @@ class MurmurationGame {
           debug: false
         }
       },
-      scene: this.gameScene
+      scene: [this.menuScene, this.gameScene, this.uiScene]
     };
 
     this.game = new Game(gameConfig);
@@ -54,6 +60,9 @@ class MurmurationGame {
     
     // Wait for game to be ready before setting up scene event handlers
     this.game.events.once('ready', () => {
+      // Start with MenuScene first
+      this.game.scene.start('MenuScene');
+      
       this.setupEventHandlers();
       this.connectToServer();
     });
@@ -131,7 +140,9 @@ class MurmurationGame {
     // Handle WebSocket messages
     this.wsClient.onMessage((data) => {
       if (data.type === 'state_update') {
+        // Update both scenes with game state
         this.gameScene.updateGameState(data.data);
+        this.uiScene.updateGameData(data.data);
       } else if (data.type === 'level_loaded') {
         console.log('Level loaded:', data.level);
       } else if (data.type === 'error') {
@@ -153,7 +164,18 @@ class MurmurationGame {
       }
     });
 
-    // Handle game events from scene
+    // Handle beacon placement - now coordinated through UIScene
+    this.uiScene.events.on('beaconSelected', (data: { type: string }) => {
+      // Update GameScene's selected beacon type
+      this.gameScene.setSelectedBeaconType(data.type);
+    });
+
+    this.uiScene.events.on('beaconCleared', () => {
+      // Clear GameScene's beacon selection
+      this.gameScene.setSelectedBeaconType(null);
+    });
+
+    // Handle game events from GameScene
     this.gameScene.events.on('placeBeacon', (data: { type: string, x: number, y: number }) => {
       console.log('🎮 Main received placeBeacon event:', data);
       this.wsClient.placeBeacon(data.type, data.x, data.y);
@@ -241,34 +263,7 @@ function initializeGame(): void {
     document.body.appendChild(gameContainer);
   }
 
-  // Add UI controls
-  const controlsDiv = document.createElement('div');
-  controlsDiv.innerHTML = `
-    <div style="position: fixed; top: 10px; right: 10px; z-index: 1000; background: rgba(0,0,0,0.8); color: white; padding: 15px; border-radius: 8px; font-family: Arial, sans-serif;">
-      <h3 style="margin: 0 0 10px 0; color: #4CAF50;">Murmuration Controls</h3>
-      <div style="font-size: 12px; line-height: 1.4;">
-        <div><strong>Game:</strong></div>
-        <div>1/2/3: Load Level 1/2/3</div>
-        <div>P: Pause, R: Resume</div>
-        <div>-: Slow (0.5x), =: Fast (2x)</div>
-        <div>E: Emergency Pulse</div>
-        <div>F: Toggle Fullscreen</div>
-        <br>
-        <div><strong>Camera:</strong></div>
-        <div>Arrow Keys / WASD: Move (Manual Mode)</div>
-        <div>Mouse Wheel: Zoom</div>
-        <div>C: Cycle Camera Mode</div>
-        <div>V: Frame All Birds</div>
-        <div>Space: Pause/Resume</div>
-        <br>
-        <div><strong>Beacons:</strong></div>
-        <div>1. Select beacon type from panel</div>
-        <div>2. Click in game world to place</div>
-        <div>3. Use 'Clear Selection' to deselect</div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(controlsDiv);
+  // Clean UI - controls are now integrated into the game interface
 
   // Start the game
   new MurmurationGame();

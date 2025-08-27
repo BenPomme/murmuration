@@ -268,44 +268,49 @@ export class GameScene extends Scene {
     // Set world bounds
     this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
     
+    // Set initial zoom and center on start zone
+    this.cameras.main.setZoom(0.4);
+    this.cameras.main.centerOn(200, 600); // Center on bird start zone
+    
     // Create enhanced background with layers
     this.createBackground();
     
-    // Create enhanced UI elements
-    this.createInfoPanel();
+    // Create enhanced UI elements - DISABLED: Now handled by UIScene
+    // this.createInfoPanel();
     
-    this.connectionText = this.createCrispText(15, 55, 'Status: Disconnected', {
-      fontSize: '14px',
-      color: '#ff0000',
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      padding: { x: 10, y: 5 },
-      borderRadius: 5
-    }).setScrollFactor(0).setDepth(100);
+    // Connection text - DISABLED: Now handled by UIScene
+    // this.connectionText = this.createCrispText(15, 55, 'Status: Disconnected', {
+    //   fontSize: '14px',
+    //   color: '#ff0000',
+    //   backgroundColor: 'rgba(0,0,0,0.7)',
+    //   padding: { x: 10, y: 5 },
+    //   borderRadius: 5
+    // }).setScrollFactor(0).setDepth(100);
 
     // Update connection status now that text element exists
     this.setConnectionStatus(this.lastConnectionStatus);
     
-    // Create controls info
-    this.add.text(10, this.cameras.main.height - 120, 
-      'Controls:\n' +
-      'Arrow Keys: Move camera\n' +
-      'Mouse Wheel: Zoom\n' +
-      'Click: Place Food beacon\n' +
-      'Right Click: Place Shelter beacon\n' +
-      'Space: Pause/Resume',
-      {
-        fontSize: '12px',
-        color: '#000000',
-        backgroundColor: '#ffffff',
-        padding: { x: 8, y: 8 }
-      }
-    ).setScrollFactor(0).setDepth(100);
+    // Create controls info - DISABLED: Now handled by UIScene
+    // this.add.text(10, this.cameras.main.height - 120, 
+    //   'Controls:\n' +
+    //   'Arrow Keys: Move camera\n' +
+    //   'Mouse Wheel: Zoom\n' +
+    //   'Click: Place Food beacon\n' +
+    //   'Right Click: Place Shelter beacon\n' +
+    //   'Space: Pause/Resume',
+    //   {
+    //     fontSize: '12px',
+    //     color: '#000000',
+    //     backgroundColor: '#ffffff',
+    //     padding: { x: 8, y: 8 }
+    //   }
+    // ).setScrollFactor(0).setDepth(100);
     
     // Initialize soundtrack
     this.initializeSoundtrack();
     
-    // Create beacon selection panel
-    this.createBeaconPanel();
+    // Create beacon selection panel - DISABLED: Now handled by UIScene
+    // this.createBeaconPanel();
     
     // Create music toggle
     this.createMusicToggle();
@@ -321,7 +326,7 @@ export class GameScene extends Scene {
     this.input.on('wheel', (pointer: any, gameObjects: any, deltaX: number, deltaY: number) => {
       const camera = this.cameras.main;
       if (deltaY > 0) {
-        camera.setZoom(Math.max(0.3, camera.zoom - this.zoomSpeed));
+        camera.setZoom(Math.max(0.1, camera.zoom - this.zoomSpeed));
       } else {
         camera.setZoom(Math.min(2.0, camera.zoom + this.zoomSpeed));
       }
@@ -498,7 +503,7 @@ export class GameScene extends Scene {
     // Calculate zoom to fit all birds (with some margin)
     const zoomX = camera.width / effectiveWidth;
     const zoomY = camera.height / effectiveHeight;
-    const targetZoom = Math.min(Math.max(zoomX, zoomY, 0.3), 2.0); // Cap min and max zoom
+    const targetZoom = Math.min(Math.max(zoomX, zoomY, 0.1), 2.0); // Cap min and max zoom
     
     // Smoothly adjust zoom and position
     camera.zoom += (targetZoom - camera.zoom) * 0.02;
@@ -676,7 +681,7 @@ export class GameScene extends Scene {
       this.updateBirdSpriteColor(sprite, targetColor);
       
       // Scale based on energy with animation
-      const targetScale = agent.alive ? Math.max(0.6, agent.energy / 100 * 1.2) : 0.3;
+      const targetScale = agent.alive ? Math.max(0.3, agent.energy / 100 * 0.8) : 0.15;
       
       // Add subtle stress shaking for high stress birds
       if (agent.alive && agent.stress > 70) {
@@ -1420,20 +1425,20 @@ export class GameScene extends Scene {
     });
     this.hudContainer.add(this.energyText);
     
-    // Create telemetry panel (collapsible)
-    this.createTelemetryPanel();
+    // Create telemetry panel (collapsible) - DISABLED: Now handled by UIScene
+    // this.createTelemetryPanel();
     
-    // Create evolution/breed panel
-    this.createEvolutionPanel();
+    // Create evolution/breed panel - DISABLED: Now handled by UIScene
+    // this.createEvolutionPanel();
     
-    // Keep reference to basic info text for compatibility - make it visible as fallback
-    this.infoText = this.createCrispText(15, 15, 'Connecting...', { 
-      fontSize: '14px', 
-      fontFamily: 'Arial, sans-serif',
-      color: '#ffffff',
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      padding: { x: 10, y: 5 }
-    }).setScrollFactor(0).setDepth(LAYER_DEPTHS.UI + 20);
+    // Keep reference to basic info text for compatibility - DISABLED: Now handled by UIScene
+    // this.infoText = this.createCrispText(15, 15, 'Connecting...', { 
+    //   fontSize: '14px', 
+    //   fontFamily: 'Arial, sans-serif',
+    //   color: '#ffffff',
+    //   backgroundColor: 'rgba(0,0,0,0.7)',
+    //   padding: { x: 10, y: 5 }
+    // }).setScrollFactor(0).setDepth(LAYER_DEPTHS.UI + 20);
   }
   
   private createTelemetryPanel() {
@@ -1857,5 +1862,23 @@ export class GameScene extends Scene {
     
     container.setDepth(LAYER_DEPTHS.HAZARDS);
     return container;
+  }
+
+  // Public method for UIScene coordination
+  public setSelectedBeaconType(type: string | null) {
+    this.selectedBeaconType = type;
+    
+    // Update cursor
+    if (type) {
+      this.input.setDefaultCursor('crosshair');
+      console.log('GameScene beacon selection updated:', type);
+    } else {
+      this.input.setDefaultCursor('default');
+      console.log('GameScene beacon selection cleared');
+    }
+  }
+
+  public getSelectedBeaconType(): string | null {
+    return this.selectedBeaconType;
   }
 }
