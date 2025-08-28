@@ -4,39 +4,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Murmuration is an "influence-not-control" evolution game where players guide bird flocks through hazards using environmental beacons. The flock evolves across generations, learning from survival experiences.
+Murmuration is a strategic multi-generational migration game where players guide bird flocks through dangerous journeys using environmental influence, not direct control. Players navigate A→B→C→D→Z migration legs, managing energy, hazards, and genetic evolution across generations.
 
 ## Core Architecture
 
 ### Simulation Engine (`sim/`)
-- **`simulation_evolved.py`**: Main game loop with breed evolution, hazard behaviors, and flock dynamics
-- **`simulation_game.py`**: Legacy game simulation (being phased out for evolved version)
-- **`server.py`**: WebSocket server managing client connections and game state with ping/pong heartbeats
-- **Agent System**: Birds have energy, stress, hazard detection, and beacon response traits
-- **Breed Evolution**: Traits improve based on survival rates and hazard encounters
+- **`simulation_evolved.py`**: Strategic migration simulation with 4-leg journeys (A→B→C→D→Z)
+- **`server.py`**: WebSocket server with manual migration progression and level completion handling
+- **`migration_system.py`**: Multi-leg journey management and progression tracking
+- **Agent System**: 100 birds with individual genetics, energy management, and survival mechanics
+- **Environmental Food System**: Visible food havens requiring strategic routing decisions
 
 ### Modern Client (`client/`)
-- **TypeScript + Phaser 3**: Real-time game client with 1280x720 canvas, WebGL rendering
-- **`GameScene.ts`**: Main game scene handling bird flocks, beacon placement, hazard visualization
-- **`WebSocketClient.ts`**: Auto-reconnecting WebSocket client with message queuing and heartbeat
-- **`AudioManager.ts`**: Procedural audio system for UI feedback and ambient sounds
-- **Vite Build System**: Fast HMR development with optimized Phaser bundling
+- **TypeScript + Phaser 3**: Strategic migration game client with edge-positioned UI panels
+- **`GameScene.ts`**: Bird flocking, environmental food sites, hazard visualization with sprite integration
+- **`UIScene.ts`**: Level progression panels, genetics tracking, beacon controls with clean layout
+- **`WebSocketClient.ts`**: Auto-reconnecting client with migration progression message handling
+- **Asset System**: Custom sprite integration (`client/assets/sprites/`) with procedural fallbacks
 
 ### Key Game Mechanics
-1. **Hazards with Distinct Behaviors**:
-   - Tornadoes: Confusion effect, 10% kill chance, energy drain
-   - Predators: Direct pursuit, 20% kill chance, triggers flock panic
-   - Graduated danger zones (outer/middle/inner) with visual feedback
 
-2. **Beacons** (player-placed influencers):
-   - Food: Energy restoration + attraction
-   - Shelter: Stress reduction + slowing
-   - Thermal: Forward boost + energy
+1. **Strategic Migration System**:
+   - 4-leg journeys: A→B→C→D→Z progression with manual advancement
+   - Environmental food sites requiring strategic detours for energy restoration
+   - Natural victory conditions (any arrivals = success, all deaths = failure)
+   - Proper survivor transfer between migration legs
 
-3. **Evolution System**:
-   - 5 evolvable traits: hazard_awareness, energy_efficiency, flock_cohesion, beacon_sensitivity, stress_resilience
-   - Breeds evolve based on performance each level
-   - Save/load breed data as JSON
+2. **Environmental Hazards**:
+   - Tornadoes: Rotating sprite visuals, energy drain, confusion effects
+   - Predators: Chase mechanics with increased stress generation (40% vs 25%)
+   - Distance-based energy consumption forcing food site usage
+
+3. **Wind Beacon System** (replaced food beacons):
+   - Wind Up/Down: Localized effects (80-unit radius) with contact-based influence
+   - Tiered effectiveness: Direct contact (>0.7) vs cohesion-based following (0.3-0.7)
+   - Budget system: 4-5 beacons maximum per level with automatic clearing
+
+4. **Genetics & Evolution**:
+   - 6 traits: hazard_awareness, energy_efficiency, flock_cohesion, beacon_sensitivity, stress_resilience, leadership
+   - Breed evolution between migrations based on survival performance
+   - Generation tracking with proper UI display (Migration X - Leg Y/4)
 
 ## Common Development Commands
 
@@ -74,24 +81,23 @@ npm run format      # Prettier formatting
 ## Current Implementation Status
 
 ### Working Features
-- **Python Backend**: WebSocket server with real-time game state updates, stable connections with ping/pong heartbeat
-- **TypeScript Client**: Modern Phaser 3 game client with 1280x720 resolution, real-time bird flocking visualization
-- **9 Playable Levels**: Varying difficulty (levels/levels.json) from training (W1) to expert (W4)
-- **Evolution System**: Breed persistence across levels with trait evolution based on survival performance  
-- **Multiple UIs**: Legacy HTML demos (`demo_*.html`) + modern TypeScript/Phaser client (`client/`)
-- **Hazard System**: Distinct tornado/predator behaviors with graduated danger zones and visual feedback
-- **Beacon Placement**: UI-based beacon selection with immediate visual feedback (Food, Shelter, Thermal types)
-- **Audio System**: Procedural Web Audio API sounds for UI feedback and ambient audio
-- **Emergency Pulse**: Server-side emergency abilities for flock guidance
+- **Strategic Migration System**: Complete A→B→C→D→Z journey progression with manual advancement
+- **Environmental Food System**: Visible green food circles at strategic locations requiring detours
+- **Natural Victory/Failure**: Dynamic completion based on actual arrivals, proper failure panels with retry
+- **Professional UI**: Edge-positioned panels (left: telemetry, right: genetics, bottom: beacons)
+- **Wind Beacon Strategy**: Localized wind effects with contact-based influence and budget limits
+- **Sprite Integration**: Custom tornado sprites, bird graphics, and UI assets with fallback system
+- **Population Management**: Accurate 100-bird populations with proper survivor tracking
+- **Level Progression**: Completion panels, continue buttons, and proper state management
 
 ### Architecture Decisions
-- **RNG Determinism**: Pass `np.random.Generator` explicitly, never use global random
-- **State Management**: Complete reset between level attempts via `reset()` method
-- **Performance Target**: 300 agents @ 60Hz (currently optimized for 100-200)
-- **Networking**: JSON over WebSocket with automatic reconnection, ping_interval=20s, ping_timeout=10s
-- **Coordinate System**: 2000x1200 game world, scaled to 1280x720 client canvas
-- **Client Architecture**: Event-driven Phaser scenes with WebSocket message handling
-- **Asset Loading**: Procedural graphics as fallback, external sprites for enhanced visuals
+- **Migration Progression**: Manual A→B→C→D→Z advancement with completion panels and survivor tracking
+- **UI Layout**: Edge-positioned panels to avoid gameplay blocking, elegant transparency design
+- **Victory Logic**: Natural completion (no healthy birds left OR 60+ seconds) vs arbitrary thresholds
+- **Beacon Strategy**: Wind-based influence system with localized contact effects and budget limits
+- **Asset Pipeline**: Custom sprite integration with procedural fallbacks for missing assets
+- **Level State**: Proper pause/resume flow, victory protection, and crash prevention
+- **Performance Target**: 100 agents @ 30Hz server updates with stable WebSocket communication
 
 ## Code Quality Standards
 
@@ -136,13 +142,21 @@ npm run format      # Prettier formatting
 - [ ] Breed traits evolve correctly
 - [ ] UI controls are accessible
 
-## Known Issues & TODOs
+## Current Phase Status
 
-1. **Performance**: Large flocks (>200) may cause frame drops
-2. **ML Training**: PPO-lite and neuroevolution stubs need implementation
-3. **Client-Server Communication**: Beacon placement events need to properly trigger server simulation updates
-4. **Connection Status**: UI connection status display doesn't always reflect actual WebSocket state
-5. **Testing Coverage**: Need more integration tests for evolution system and client-server interaction
+### ✅ PHASE 1 COMPLETE: Strategic Foundation
+- Manual migration progression (A→B→C→D→Z structure) 
+- Environmental food system with visible strategic placement
+- Professional UI layout with edge-positioned panels
+- Natural victory/failure conditions with proper end panels
+- Wind beacon strategy system with budget management
+- Population management with accurate survivor tracking
+
+### 🎯 READY FOR PHASE 2: Strategic Depth
+- Difficulty scaling across migrations
+- Multi-leg journey templates with procedural generation  
+- Advanced hazard behaviors (moving storms, predator chases)
+- Enhanced player decision-making tools and feedback
 
 ## File Structure
 
