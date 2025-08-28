@@ -34,6 +34,7 @@ class Genetics:
     flock_cohesion: float = 0.5
     beacon_sensitivity: float = 0.5
     stress_resilience: float = 0.5
+    leadership: float = 0.5  # NEW: How much influence this bird has on flock movement
     
     # Physical traits (affect appearance)
     size_factor: float = 1.0  # 0.8-1.2
@@ -51,6 +52,7 @@ class Genetics:
             'flock_cohesion': self.flock_cohesion,
             'beacon_sensitivity': self.beacon_sensitivity,
             'stress_resilience': self.stress_resilience,
+            'leadership': self.leadership,
             'size_factor': self.size_factor,
             'speed_factor': self.speed_factor,
             'fertility': self.fertility,
@@ -66,6 +68,7 @@ class Genetics:
             flock_cohesion=rng.uniform(0.4, 0.6),
             beacon_sensitivity=rng.uniform(0.4, 0.6),
             stress_resilience=rng.uniform(0.3, 0.7),
+            leadership=rng.uniform(0.3, 0.7),
             size_factor=rng.uniform(0.9, 1.1),
             speed_factor=rng.uniform(0.95, 1.05),
             fertility=rng.uniform(0.8, 1.0),
@@ -79,7 +82,7 @@ class Genetics:
         
         # Copy base genetics with mutations
         for trait in ['hazard_awareness', 'energy_efficiency', 'flock_cohesion', 
-                     'beacon_sensitivity', 'stress_resilience', 'fertility', 'longevity']:
+                     'beacon_sensitivity', 'stress_resilience', 'leadership', 'fertility', 'longevity']:
             base_value = getattr(base, trait)
             if rng.random() < mutation_rate:
                 # Apply mutation
@@ -106,7 +109,7 @@ class Genetics:
         trait_groups = {
             'survival': ['hazard_awareness', 'stress_resilience'],
             'efficiency': ['energy_efficiency', 'longevity'],
-            'social': ['flock_cohesion', 'beacon_sensitivity'],
+            'social': ['flock_cohesion', 'beacon_sensitivity', 'leadership'],
             'breeding': ['fertility']
         }
         
@@ -222,6 +225,7 @@ class PopulationStats:
     avg_flock_cohesion: float = 0.0
     avg_beacon_sensitivity: float = 0.0
     avg_stress_resilience: float = 0.0
+    avg_leadership: float = 0.0
     
     genetic_diversity: float = 0.0  # 0 = clones, 1 = max diversity
     inbreeding_coefficient: float = 0.0
@@ -902,7 +906,8 @@ class GeneticSimulation:
             'energy_efficiency': [],
             'flock_cohesion': [],
             'beacon_sensitivity': [],
-            'stress_resilience': []
+            'stress_resilience': [],
+            'leadership': []
         }
         
         for bird in alive_birds:
@@ -914,6 +919,7 @@ class GeneticSimulation:
         stats.avg_flock_cohesion = np.mean(traits['flock_cohesion'])
         stats.avg_beacon_sensitivity = np.mean(traits['beacon_sensitivity'])
         stats.avg_stress_resilience = np.mean(traits['stress_resilience'])
+        stats.avg_leadership = np.mean(traits['leadership'])
         
         # Genetic diversity (standard deviation as proxy)
         diversity_scores = []

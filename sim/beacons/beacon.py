@@ -48,10 +48,8 @@ def _get_logger():
 
 class BeaconType(Enum):
     """Types of beacons available for placement."""
-    LIGHT = "light"
-    SOUND = "sound" 
-    FOOD_SCENT = "food_scent"
-    WIND_LURE = "wind_lure"
+    WIND_UP = "wind_up"      # Pushes birds upward
+    WIND_DOWN = "wind_down"  # Pushes birds downward
 
 
 @dataclass
@@ -74,12 +72,11 @@ class BeaconSpec:
         return self.half_life_days / math.log(2)
 
 
-# Beacon specifications from design doc
+# Enhanced beacon specifications for strategic gameplay
+# Increased radius and longer half-life to make beacons more influential
 BEACON_SPECS = {
-    BeaconType.LIGHT: BeaconSpec(radius=150.0, cost=1, half_life_days=1.5),
-    BeaconType.SOUND: BeaconSpec(radius=180.0, cost=1, half_life_days=1.0),
-    BeaconType.FOOD_SCENT: BeaconSpec(radius=120.0, cost=2, half_life_days=0.8),
-    BeaconType.WIND_LURE: BeaconSpec(radius=200.0, cost=2, half_life_days=1.0),
+    BeaconType.WIND_UP: BeaconSpec(radius=80.0, cost=1, half_life_days=1.5),    # Upward wind push - smaller direct contact area
+    BeaconType.WIND_DOWN: BeaconSpec(radius=80.0, cost=1, half_life_days=1.5),  # Downward wind push - smaller direct contact area
 }
 
 # Time conversion: 1 in-game day = 6000 ticks (100 seconds at 60Hz)
@@ -144,9 +141,10 @@ class Beacon:
     def get_distance_decay(self, position: Position) -> float:
         """Calculate distance-based field strength at a position.
         
-        Uses exponential decay: exp(-r/ρ) where:
+        Uses exponential decay: exp(-r/(ρ*1.5)) where:
         - r is distance from beacon
         - ρ is the beacon's effective radius
+        - 1.5 multiplier makes the field decay slower for stronger influence
         
         Args:
             position: Position to evaluate field strength
@@ -155,7 +153,9 @@ class Beacon:
             Field strength between 0 and 1
         """
         distance = np.linalg.norm(position - self.position)
-        return math.exp(-distance / self.spec.radius)
+        # Enhanced influence: slower decay rate makes beacons more effective at distance
+        effective_radius = self.spec.radius * 1.5
+        return math.exp(-distance / effective_radius)
     
     def get_field_strength(self, position: Position, current_tick: Tick) -> float:
         """Calculate total field strength at position including both decays.
@@ -186,100 +186,34 @@ class Beacon:
         return self.get_temporal_decay(current_tick) < threshold
 
 
-class LightBeacon(Beacon):
-    """Light beacon that draws birds at night.
-    
-    Provides attraction field that is stronger during night hours.
-    Radius: 150, Cost: 1, Half-life: 1.5 days
-    """
+class WindUpBeacon(Beacon):
+    """Wind beacon that pushes birds upward (negative Y direction)."""
     
     def __init__(self, position: Position, placed_at_tick: Tick, beacon_id: int):
-        super().__init__(BeaconType.LIGHT, position, placed_at_tick, beacon_id)
+        super().__init__(BeaconType.WIND_UP, position, placed_at_tick, beacon_id)
     
-    def get_attraction_strength(self, position: Position, current_tick: Tick, 
-                              is_night: bool = False) -> float:
-        """Get attraction strength with night bonus.
+    def get_wind_force(self, position: Position, current_tick: Tick) -> Vector2D:
+        """Get upward wind force at position.
         
-        Args:
-            position: Position to evaluate
-            current_tick: Current simulation tick
-            is_night: Whether it's currently night time
-            
-        Returns:
-            Attraction strength (stronger at night)
+        Returns force vector pushing birds upward.
         """
-        base_strength = self.get_field_strength(position, current_tick)
-        night_multiplier = 1.5 if is_night else 0.7
-        return base_strength * night_multiplier
+        strength = self.get_field_strength(position, current_tick)
+        return create_vector2d(0.0, -strength * 15.0)  # Negative Y = upward
 
 
-class SoundBeacon(Beacon):
-    """Sound beacon that increases local cohesion.
-    
-    Provides cohesion boost field that helps birds stay together.
-    Radius: 180, Cost: 1, Half-life: 1.0 day
-    """
+class WindDownBeacon(Beacon):
+    """Wind beacon that pushes birds downward (positive Y direction)."""
     
     def __init__(self, position: Position, placed_at_tick: Tick, beacon_id: int):
-        super().__init__(BeaconType.SOUND, position, placed_at_tick, beacon_id)
+        super().__init__(BeaconType.WIND_DOWN, position, placed_at_tick, beacon_id)
     
-    def get_cohesion_boost(self, position: Position, current_tick: Tick) -> float:
-        """Get cohesion boost strength at position.
+    def get_wind_force(self, position: Position, current_tick: Tick) -> Vector2D:
+        """Get downward wind force at position.
         
-        Args:
-            position: Position to evaluate
-            current_tick: Current simulation tick
-            
-        Returns:
-            Cohesion boost factor
+        Returns force vector pushing birds downward.
         """
-        return self.get_field_strength(position, current_tick)
-
-
-class FoodScentBeacon(Beacon):
-    """Food scent beacon that biases foraging behavior.
-    
-    Creates attractive scent field that influences foraging decisions.
-    Radius: 120, Cost: 2, Half-life: 0.8 day
-    """
-    
-    def __init__(self, position: Position, placed_at_tick: Tick, beacon_id: int):
-        super().__init__(BeaconType.FOOD_SCENT, position, placed_at_tick, beacon_id)
-    
-    def get_foraging_bias(self, position: Position, current_tick: Tick) -> float:
-        """Get foraging bias strength at position.
-        
-        Args:
-            position: Position to evaluate
-            current_tick: Current simulation tick
-            
-        Returns:
-            Foraging bias factor
-        """
-        return self.get_field_strength(position, current_tick)
-
-
-class WindLureBeacon(Beacon):
-    """Wind lure beacon that provides tailwind boost.
-    
-    Enhances effective tailwind in the beacon's area.
-    Radius: 200, Cost: 2, Half-life: 1.0 day
-    """
-    
-    def __init__(self, position: Position, placed_at_tick: Tick, beacon_id: int):
-        super().__init__(BeaconType.WIND_LURE, position, placed_at_tick, beacon_id)
-    
-    def get_wind_boost(self, position: Position, current_tick: Tick) -> float:
-        """Get wind boost strength at position.
-        
-        Args:
-            position: Position to evaluate
-            current_tick: Current simulation tick
-            
-        Returns:
-            Wind boost factor
-        """
-        return self.get_field_strength(position, current_tick)
+        strength = self.get_field_strength(position, current_tick)
+        return create_vector2d(0.0, strength * 15.0)  # Positive Y = downward
 
 
 class BeaconManager:
@@ -355,14 +289,10 @@ class BeaconManager:
         self.next_beacon_id += 1
         
         # Create beacon instance based on type
-        if beacon_type == BeaconType.LIGHT:
-            beacon = LightBeacon(position, current_tick, beacon_id)
-        elif beacon_type == BeaconType.SOUND:
-            beacon = SoundBeacon(position, current_tick, beacon_id)
-        elif beacon_type == BeaconType.FOOD_SCENT:
-            beacon = FoodScentBeacon(position, current_tick, beacon_id)
-        elif beacon_type == BeaconType.WIND_LURE:
-            beacon = WindLureBeacon(position, current_tick, beacon_id)
+        if beacon_type == BeaconType.WIND_UP:
+            beacon = WindUpBeacon(position, current_tick, beacon_id)
+        elif beacon_type == BeaconType.WIND_DOWN:
+            beacon = WindDownBeacon(position, current_tick, beacon_id)
         else:
             _get_logger().error(
                 "Unknown beacon type",
@@ -487,40 +417,34 @@ class BeaconManager:
         }
         
         for beacon in self.beacons:
-            if beacon.beacon_type == BeaconType.LIGHT:
-                strength = beacon.get_attraction_strength(position, current_tick, is_night)
-                type_contributions[BeaconType.LIGHT].append(strength)
-            elif beacon.beacon_type == BeaconType.SOUND:
-                strength = beacon.get_cohesion_boost(position, current_tick)
-                type_contributions[BeaconType.SOUND].append(strength)
-            elif beacon.beacon_type == BeaconType.FOOD_SCENT:
-                strength = beacon.get_foraging_bias(position, current_tick)
-                type_contributions[BeaconType.FOOD_SCENT].append(strength)
-            elif beacon.beacon_type == BeaconType.WIND_LURE:
-                strength = beacon.get_wind_boost(position, current_tick)
-                type_contributions[BeaconType.WIND_LURE].append(strength)
+            if beacon.beacon_type == BeaconType.WIND_UP:
+                strength = beacon.get_field_strength(position, current_tick)
+                type_contributions[BeaconType.WIND_UP].append(strength)
+            elif beacon.beacon_type == BeaconType.WIND_DOWN:
+                strength = beacon.get_field_strength(position, current_tick)
+                type_contributions[BeaconType.WIND_DOWN].append(strength)
         
         # Apply diminishing returns to stacked beacons of same type
-        contributions["light_attraction"] = self._apply_diminishing_returns(
-            type_contributions[BeaconType.LIGHT]
-        )
-        contributions["cohesion_boost"] = self._apply_diminishing_returns(
-            type_contributions[BeaconType.SOUND]
-        )
-        contributions["foraging_bias"] = self._apply_diminishing_returns(
-            type_contributions[BeaconType.FOOD_SCENT]
-        )
-        contributions["wind_boost"] = self._apply_diminishing_returns(
-            type_contributions[BeaconType.WIND_LURE]
-        )
+        wind_up = type_contributions.get(BeaconType.WIND_UP, [])
+        wind_down = type_contributions.get(BeaconType.WIND_DOWN, [])
+        
+        contributions["wind_up_force"] = self._apply_diminishing_returns(wind_up)
+        contributions["wind_down_force"] = self._apply_diminishing_returns(wind_down)
+        
+        # Keep legacy fields for compatibility but set to 0
+        contributions["light_attraction"] = 0.0
+        contributions["cohesion_boost"] = 0.0
+        contributions["foraging_bias"] = 0.0
+        contributions["wind_boost"] = 0.0
         
         return contributions
     
     def _apply_diminishing_returns(self, strengths: List[float]) -> float:
         """Apply diminishing returns to multiple beacon contributions.
         
-        Uses formula: total = Σ(s_i * (0.7)^i) where s_i are strengths
+        Uses formula: total = Σ(s_i * (0.85)^i) where s_i are strengths
         sorted in descending order and i is the stack index.
+        Enhanced to be less punishing for strategic beacon placement.
         
         Args:
             strengths: List of individual beacon strengths
@@ -536,7 +460,9 @@ class BeaconManager:
         
         total = 0.0
         for i, strength in enumerate(sorted_strengths):
-            diminishing_factor = 0.7 ** i
+            # Less aggressive diminishing returns (0.85 instead of 0.7)
+            # This encourages strategic placement of multiple beacons
+            diminishing_factor = 0.85 ** i
             total += strength * diminishing_factor
         
         return total

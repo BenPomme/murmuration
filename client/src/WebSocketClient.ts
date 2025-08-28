@@ -133,13 +133,11 @@ export class WebSocketClient {
 
   // Game-specific message helpers matching Python server protocol
   public loadLevel(levelIndex: number): void {
-    // Convert level index to level ID format expected by server
-    const levelIds = ['W1-1', 'W1-2', 'W2-1', 'W2-2', 'W3-1'];
-    const levelId = levelIds[levelIndex] || 'W1-1';
-    
+    // Use unified simulation with genetic gameplay
+    console.log('🧬 Starting unified genetic simulation...');
     this.send({
-      type: 'load_level',
-      level: levelId
+      type: 'start_unified',
+      migration_id: levelIndex + 1 // Migration 1, 2, 3, etc.
     });
   }
 
@@ -192,6 +190,13 @@ export class WebSocketClient {
         type: 'emergency',
         strength: 100
       }
+    });
+  }
+
+  public continueMigration(): void {
+    console.log('🐦 Continuing to next migration leg...');
+    this.send({
+      type: 'continue_migration'
     });
   }
 }

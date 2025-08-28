@@ -10,6 +10,7 @@ class MurmurationGame {
   private menuScene: MenuScene;
   private gameScene: GameScene;
   private uiScene: UIScene;
+  private levelStartRequested = false;
 
   constructor() {
     // Initialize WebSocket client
@@ -25,24 +26,15 @@ class MurmurationGame {
     
     const gameConfig: Types.Core.GameConfig = {
       type: Phaser.AUTO,
-      width: dimensions.width,
-      height: dimensions.height,
+      width: 1280,
+      height: 720,
       parent: 'game-container',
       backgroundColor: '#87CEEB',
-      resolution: window.devicePixelRatio || 1, // High-DPI support
       scale: {
-        mode: Phaser.Scale.RESIZE, // Dynamic resize instead of fixed
+        mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: dimensions.width,
-        height: dimensions.height,
-        min: {
-          width: 800,
-          height: 450
-        },
-        max: {
-          width: dimensions.maxWidth,
-          height: dimensions.maxHeight
-        }
+        width: 1280,
+        height: 720
       },
       physics: {
         default: 'arcade',
@@ -144,7 +136,26 @@ class MurmurationGame {
         this.gameScene.updateGameState(data.data);
         this.uiScene.updateGameData(data.data);
       } else if (data.type === 'level_loaded') {
-        console.log('Level loaded:', data.level);
+        console.log('📋 Level loaded event received:', data);
+        // Only show level panel if this is the initial connection, not after user clicked "START LEVEL"
+        // We can detect this by checking if the game is already paused or if this is a fresh connection
+        if (!this.levelStartRequested) {
+          const levelNumber = this.extractLevelNumber(data.level || 'Level 1');
+          const males = data.males || 50;
+          const females = data.females || 50;
+          const legName = data.leg_name || 'Migration Leg A-B';
+          console.log('📋 Showing level panel:', { levelNumber, males, females, legName });
+          this.uiScene.showLevelPanel(levelNumber, males, females, legName);
+          // Pause the game initially
+          this.wsClient.pauseGame();
+        } else {
+          console.log('📋 Level loaded after START button clicked - not showing panel again');
+          this.levelStartRequested = false; // Reset flag
+        }
+      } else if (data.type === 'level_completed') {
+        console.log('🏆 Level completed:', data.data);
+        // Show completion panel with option to continue to next leg
+        this.uiScene.showCompletionPanel(data.data);
       } else if (data.type === 'error') {
         console.error('Server error:', data.message);
       }
@@ -155,12 +166,14 @@ class MurmurationGame {
     this.wsClient.onConnectionChange((connected) => {
       console.log(`🔌 Connection status changed: ${connected}`);
       this.gameScene.setConnectionStatus(connected);
+      
       if (connected) {
-        // Auto-load first level when connected
-        console.log('🚀 Connected! Auto-loading level 0 in 1 second...');
+        // When connected, show the level panel immediately
+        // The server might auto-load a level, but we'll pause it and wait for user input
         setTimeout(() => {
-          this.wsClient.loadLevel(0);
-        }, 1000);
+          console.log('📋 Showing level panel on connection');
+          this.uiScene.showLevelPanel(1, 50, 50, 'Breeding Grounds to Coastal Wetlands');
+        }, 1000); // Give server time to auto-load if it does
       }
     });
 
@@ -173,6 +186,24 @@ class MurmurationGame {
     this.uiScene.events.on('beaconCleared', () => {
       // Clear GameScene's beacon selection
       this.gameScene.setSelectedBeaconType(null);
+    });
+
+    // Handle level panel events
+    this.uiScene.events.on('startLevel', () => {
+      console.log('🎮 Level start requested');
+      // Set flag to prevent level panel from showing again
+      this.levelStartRequested = true;
+      // Start a fresh level instead of just resuming
+      this.wsClient.loadLevel(0); // Start Level 1 (index 0)
+    });
+
+    // Handle continue to next leg events  
+    this.uiScene.events.on('continueToNextLeg', () => {
+      console.log('🎮 Continue to next migration leg requested');
+      // Set flag to prevent level panel from showing when next leg loads
+      this.levelStartRequested = true;
+      // Continue to next migration leg
+      this.wsClient.continueMigration();
     });
 
     // Handle game events from GameScene
@@ -189,19 +220,20 @@ class MurmurationGame {
     this.gameScene.events.on('loadLevel', (levelIndex: number) => {
       this.wsClient.loadLevel(levelIndex);
     });
+    
+    // Handle loadFirstLevel event from MenuScene
+    this.gameScene.events.on('loadFirstLevel', () => {
+      console.log('🎮 Loading first level after Start Game clicked...');
+      // Give scenes a moment to fully initialize
+      setTimeout(() => {
+        this.wsClient.loadLevel(0);
+      }, 500);
+    });
 
     // Add keyboard shortcuts
     document.addEventListener('keydown', (event) => {
       switch (event.key) {
-        case '1':
-          this.wsClient.loadLevel(0);
-          break;
-        case '2':
-          this.wsClient.loadLevel(1);
-          break;
-        case '3':
-          this.wsClient.loadLevel(2);
-          break;
+        // Removed manual level switching - levels progress automatically
         case 'p':
           this.wsClient.pauseGame();
           break;
@@ -231,6 +263,11 @@ class MurmurationGame {
           break;
       }
     });
+  }
+
+  private extractLevelNumber(levelString: string): number {
+    const match = levelString.match(/\d+/);
+    return match ? parseInt(match[0]) : 1;
   }
 
   private async connectToServer() {

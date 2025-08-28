@@ -3,8 +3,6 @@ import Phaser from 'phaser';
 export class MenuScene extends Phaser.Scene {
   private keyArt!: Phaser.GameObjects.Image;
   private startButton!: Phaser.GameObjects.Container;
-  private titleText!: Phaser.GameObjects.Text;
-  private subtitleText!: Phaser.GameObjects.Text;
   private backgroundMusic?: Phaser.Sound.BaseSound;
   
   // Color palette extracted from key art
@@ -31,21 +29,8 @@ export class MenuScene extends Phaser.Scene {
     this.load.image('button_normal', 'assets/sprites/ui/Blue/ButtonsBig [Normal]/Button1.png');
     this.load.image('button_hover', 'assets/sprites/ui/Blue/ButtonsBig [Hover]/Button-1.png');
     
-    // Load music if available (graceful fallback if missing)
-    this.load.audio('menu_music', ['assets/sounds/music/menu.mp3', 'assets/sounds/music/menu.ogg'], { 
-      instances: 1 
-    });
-    
-    // Create fallback audio context for browsers that require user interaction
-    this.load.on('filecomplete-audio-menu_music', () => {
-      console.log('Menu music loaded successfully');
-    });
-    
-    this.load.on('loaderror', (file: any) => {
-      if (file.key === 'menu_music') {
-        console.warn('Menu music not found - continuing without audio');
-      }
-    });
+    // Audio loading disabled to prevent crashes
+    console.log('Audio loading disabled for stability');
   }
 
   create() {
@@ -71,8 +56,8 @@ export class MenuScene extends Phaser.Scene {
     // Create title and subtitle (they're already in the key art, but we can add interactive elements)
     this.createUI(width, height);
     
-    // Start background music
-    this.startMusic();
+    // Music disabled for stability
+    console.log('Music disabled for stability');
     
     // Handle window resize
     this.scale.on('resize', this.handleResize, this);
@@ -173,7 +158,7 @@ export class MenuScene extends Phaser.Scene {
     });
     
     // Add subtle version text
-    const versionText = this.add.text(width - 20, height - 20, 'v1.0 - Evolution Build', {
+    this.add.text(width - 20, height - 20, 'v1.0 - Evolution Build', {
       fontSize: '14px',
       fontFamily: 'Arial, sans-serif',
       color: Phaser.Display.Color.ValueToColor(this.colors.white).rgba,
@@ -181,7 +166,7 @@ export class MenuScene extends Phaser.Scene {
     }).setOrigin(1, 1);
     
     // Add instructions
-    const instructionsText = this.add.text(width / 2, height * 0.85, 
+    this.add.text(width / 2, height * 0.85, 
       'Guide your flock through dangerous skies using beacons\nPress SPACE or click START to begin', {
       fontSize: '16px',
       fontFamily: 'Arial, sans-serif',
@@ -232,87 +217,6 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
-  private startMusic() {
-    try {
-      if (this.cache.audio.exists('menu_music')) {
-        this.backgroundMusic = this.sound.add('menu_music', {
-          loop: true,
-          volume: 0.3
-        });
-        
-        // Fade in music
-        this.backgroundMusic.play();
-        
-        if ('setVolume' in this.backgroundMusic) {
-          (this.backgroundMusic as any).setVolume(0);
-          this.tweens.add({
-            targets: this.backgroundMusic,
-            volume: 0.3,
-            duration: 3000
-          });
-        }
-        
-        console.log('Menu music started');
-      } else {
-        // Create subtle ambient sound effect using Web Audio API as fallback
-        this.createAmbientSoundscape();
-        console.log('Menu ambient soundscape created');
-      }
-    } catch (error) {
-      console.warn('Could not start menu audio:', error);
-    }
-  }
-
-  private createAmbientSoundscape() {
-    // Create a subtle ambient sound using Web Audio API
-    try {
-      const audioContext = (this.sound as any).context;
-      if (audioContext) {
-        // Create subtle wind-like ambient sound
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        const filterNode = audioContext.createBiquadFilter();
-        
-        // Configure low-frequency ambient sound
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(60, audioContext.currentTime); // Low frequency
-        
-        // Low-pass filter for gentle sound
-        filterNode.type = 'lowpass';
-        filterNode.frequency.setValueAtTime(200, audioContext.currentTime);
-        
-        // Very quiet volume
-        gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.02, audioContext.currentTime + 2);
-        
-        // Connect audio nodes
-        oscillator.connect(filterNode);
-        filterNode.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        // Start and stop after menu transition
-        oscillator.start(audioContext.currentTime);
-        
-        // Store reference for cleanup
-        this.backgroundMusic = {
-          stop: () => {
-            try {
-              oscillator.stop();
-              gainNode.disconnect();
-            } catch (e) {
-              // Ignore cleanup errors
-            }
-          },
-          destroy: () => {
-            // Cleanup handled in stop
-          },
-          isPlaying: true
-        } as any;
-      }
-    } catch (error) {
-      console.warn('Could not create ambient soundscape:', error);
-    }
-  }
 
   private startGame() {
     console.log('Starting game...');
@@ -325,23 +229,19 @@ export class MenuScene extends Phaser.Scene {
       duration: 100,
       yoyo: true,
       onComplete: () => {
-        // Fade out music
-        if (this.backgroundMusic && this.backgroundMusic.isPlaying) {
-          this.tweens.add({
-            targets: this.backgroundMusic,
-            volume: 0,
-            duration: 1000,
-            onComplete: () => {
-              this.backgroundMusic?.stop();
-            }
-          });
-        }
+        console.log('Button animation complete, starting scene transition...');
         
-        // Transition to game
+        // Skip music fade since audio is disabled
+        // Transition to game immediately
         this.cameras.main.fade(1000, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
+          console.log('Camera fade complete, starting GameScene...');
           this.scene.start('GameScene');
           this.scene.start('UIScene');
+          
+          // Emit event to load level after scenes are started
+          this.scene.get('GameScene').events.emit('loadFirstLevel');
+          
           this.scene.stop();
         });
       }

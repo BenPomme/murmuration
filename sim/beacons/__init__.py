@@ -18,10 +18,8 @@ Following CLAUDE.md standards:
 
 from .beacon import (
     Beacon,
-    LightBeacon,
-    SoundBeacon,
-    FoodScentBeacon,
-    WindLureBeacon,
+    WindUpBeacon,
+    WindDownBeacon,
     BeaconType,
     BeaconManager,
 )
@@ -36,10 +34,8 @@ from .pulse import (
 
 __all__ = [
     "Beacon",
-    "LightBeacon", 
-    "SoundBeacon",
-    "FoodScentBeacon",
-    "WindLureBeacon",
+    "WindUpBeacon", 
+    "WindDownBeacon",
     "BeaconType",
     "BeaconManager",
     "Pulse",

@@ -3,7 +3,7 @@ import { audioManager } from './AudioManager';
 import { LAYER_DEPTHS } from './config/gameConfig';
 
 // Object Pool class for efficient memory management
-class ObjectPool<T extends Phaser.GameObjects.GameObject> {
+class ObjectPool<T extends Phaser.GameObjects.GameObject & { setVisible(visible: boolean): T; setActive(active: boolean): T }> {
   private available: T[] = [];
   private inUse: Set<T> = new Set();
 
@@ -93,6 +93,22 @@ interface Agent {
   energy: number;
   stress: number;
   alive: boolean;
+  // NEW: Enhanced genetic traits for visualization
+  gender?: 'male' | 'female';
+  generation?: number;
+  genetics?: {
+    hazard_awareness: number;
+    energy_efficiency: number;
+    flock_cohesion: number;
+    beacon_sensitivity: number;
+    stress_resilience: number;
+    leadership: number;
+    speed_factor: number;
+  };
+  fitness?: number;
+  survived_levels?: number;
+  close_calls?: number;
+  leadership_time?: number;
 }
 
 interface Beacon {
@@ -143,6 +159,7 @@ export class GameScene extends Scene {
   private gameState: GameState | null = null;
   private agentSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private beaconSprites: Map<string, Phaser.GameObjects.Container> = new Map();
+  private foodSiteSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private hazardSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private hazardParticles: Map<string, Phaser.GameObjects.Particles.ParticleEmitter> = new Map();
   private destinationSprite: Phaser.GameObjects.Graphics | null = null;
@@ -195,6 +212,10 @@ export class GameScene extends Scene {
   
   // Object Pooling System
   private agentPool: ObjectPool<Phaser.GameObjects.Container> = new ObjectPool();
+  
+  // NEW: Bird inspection system
+  private birdInspectionPanel?: Phaser.GameObjects.Container;
+  private inspectedBirdId?: number;
   private particlePool: ObjectPool<Phaser.GameObjects.Particles.ParticleEmitter> = new ObjectPool();
   private graphicsPool: ObjectPool<Phaser.GameObjects.Graphics> = new ObjectPool();
   private textPool: ObjectPool<Phaser.GameObjects.Text> = new ObjectPool();
@@ -227,12 +248,38 @@ export class GameScene extends Scene {
       'murmuration.mp3'
     ]);
     
-    // Only load assets we know exist and work
+    // Load YOUR actual sprite assets from client/assets/sprites/
     try {
-      this.load.image('sky_bg', 'assets/sprites/environment/sky_gradient.png');
-      this.load.image('clouds', 'assets/sprites/environment/clouds.png');
+      // Bird sprites
+      this.load.image('bird_female', 'assets/sprites/bird-female.png');
+      this.load.image('bird_exhausted', 'assets/sprites/bird-exhausted.png');
+      this.load.image('bird_leader_crown', 'assets/sprites/bird-leader-crown.png');
+      
+      // Hazard sprites  
+      this.load.image('tornado_sprite', 'assets/sprites/tornado.png');
+      this.load.image('predator_sprite', 'assets/sprites/predator.png');
+      
+      // Beacon sprites
+      this.load.image('beacon_food', 'assets/sprites/beacon-food.png');
+      this.load.image('beacon_shelter', 'assets/sprites/beacon-shelter.png');
+      this.load.image('beacon_thermal', 'assets/sprites/beacon-thermal.png');
+      
+      // Environment and UI sprites
+      this.load.image('food_site', 'assets/sprites/food-site.png');
+      this.load.image('checkpoint', 'assets/sprites/checkpoint.png');
+      this.load.image('genetics_panel_bg', 'assets/sprites/genetics-panel-bg.png');
+      this.load.image('trait_bar_bg', 'assets/sprites/trait-bar-bg.png');
+      this.load.image('trait_bar_fill', 'assets/sprites/trait-bar-fill.png');
+      
+      // Status indicators
+      this.load.image('stress_indicator', 'assets/sprites/stress-indicator.png');
+      this.load.image('generation_icon', 'assets/sprites/generation-icon.png');
+      this.load.image('breeding_heart', 'assets/sprites/breeding-heart.png');
+      this.load.image('migration_path', 'assets/sprites/migration-path.png');
+      
+      console.log('🎨 Your custom sprites loaded successfully');
     } catch (error) {
-      console.warn('Environment assets not loaded:', error);
+      console.warn('Some sprites not loaded:', error);
     }
     
     // Create procedural particle textures
@@ -268,9 +315,9 @@ export class GameScene extends Scene {
     // Set world bounds
     this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
     
-    // Set initial zoom and center on start zone
-    this.cameras.main.setZoom(0.4);
-    this.cameras.main.centerOn(200, 600); // Center on bird start zone
+    // Set initial zoom for better visibility
+    this.cameras.main.setZoom(0.8);
+    this.cameras.main.centerOn(1000, 600); // Center on middle of world
     
     // Create enhanced background with layers
     this.createBackground();
@@ -354,6 +401,10 @@ export class GameScene extends Scene {
         this.placeBeacon(this.selectedBeaconType, pointer.worldX, pointer.worldY);
         console.log('Beacon placement completed');
         // Keep beacon selected for multiple placements
+      } else if (pointer.leftButtonDown()) {
+        // NEW: Check for bird click (inspect bird if close enough)
+        this.checkBirdInspection(pointer.worldX, pointer.worldY);
+        console.log('Clicked without beacon selected - checking for bird inspection');
       } else {
         console.log('Not placing beacon - leftButton:', pointer.leftButtonDown(), 'selectedType:', this.selectedBeaconType);
       }
@@ -419,16 +470,16 @@ export class GameScene extends Scene {
     const camera = this.cameras.main;
     const speed = this.cameraSpeed * (1 / camera.zoom);
     
-    if (this.cursors.left?.isDown || this.cursors.A?.isDown) {
+    if (this.cursors.left?.isDown) {
       camera.scrollX -= speed * 0.016;
     }
-    if (this.cursors.right?.isDown || this.cursors.D?.isDown) {
+    if (this.cursors.right?.isDown) {
       camera.scrollX += speed * 0.016;
     }
-    if (this.cursors.up?.isDown || this.cursors.W?.isDown) {
+    if (this.cursors.up?.isDown) {
       camera.scrollY -= speed * 0.016;
     }
-    if (this.cursors.down?.isDown || this.cursors.S?.isDown) {
+    if (this.cursors.down?.isDown) {
       camera.scrollY += speed * 0.016;
     }
   }
@@ -581,6 +632,12 @@ export class GameScene extends Scene {
   }
 
   public updateGameState(newState: GameState) {
+    console.log('🎮 GameScene received state update:', {
+      agents: newState.agents?.length || 0,
+      beacons: newState.beacons?.length || 0,
+      hazards: newState.hazards?.length || 0,
+      food_sites: newState.food_sites?.length || 0
+    });
     this.gameState = newState;
     this.updateVisuals();
     this.updateUI();
@@ -602,6 +659,12 @@ export class GameScene extends Scene {
     this.particlePool.destroy();
     this.graphicsPool.destroy();
     this.textPool.destroy();
+    
+    // Clean up food site sprites
+    for (const container of this.foodSiteSprites.values()) {
+      container.destroy();
+    }
+    this.foodSiteSprites.clear();
     
     super.destroy();
   }
@@ -635,8 +698,11 @@ export class GameScene extends Scene {
     
     this.updateAgents();
     this.updateBeacons();
+    this.updateFoodSites();
     this.updateHazards();
     this.updateDestination();
+    // NEW: Update bird inspection panel if active
+    this.updateBirdInspection();
   }
 
   private updateAgents() {
@@ -665,10 +731,16 @@ export class GameScene extends Scene {
       // Update position
       sprite.setPosition(agent.x, agent.y);
       
-      // Update color based on energy and alive status with smooth transitions
+      // NEW: Check if bird is feeding at food sites and add visual effects
+      this.updateBirdFeedingEffects(agent, sprite);
+      
+      // Update color based on energy and alive status with genetic modification
       let targetColor;
       if (!agent.alive) {
         targetColor = 0x666666; // Gray for dead
+      } else if (agent.energy < 10) {
+        // NEW: Critical exhaustion zone (flashing red)
+        targetColor = this.time.now % 500 < 250 ? 0xff0000 : 0xff4444;
       } else if (agent.energy < 30) {
         targetColor = 0xff4444; // Red for low energy
       } else if (agent.energy < 60) {
@@ -677,8 +749,22 @@ export class GameScene extends Scene {
         targetColor = 0x44ff44; // Green for high energy
       }
       
+      // NEW: Modify color based on gender (subtle tinting)
+      if (agent.alive && agent.gender) {
+        if (agent.gender === 'male') {
+          // Subtle blue tint for males
+          targetColor = this.blendColors(targetColor, 0x0044ff, 0.2);
+        } else {
+          // Subtle pink tint for females
+          targetColor = this.blendColors(targetColor, 0xff0044, 0.2);
+        }
+      }
+      
       // Update bird sprite color with luminous effect
       this.updateBirdSpriteColor(sprite, targetColor);
+      
+      // NEW: Update genetic display (gender, generation, leadership)
+      this.updateBirdGeneticDisplay(sprite, agent);
       
       // Scale based on energy with animation
       const targetScale = agent.alive ? Math.max(0.3, agent.energy / 100 * 0.8) : 0.15;
@@ -756,10 +842,6 @@ export class GameScene extends Scene {
     let iconKey = '';
     
     switch (beacon.type.toLowerCase()) {
-      case 'food': 
-        color = 0x00ff00; 
-        iconKey = 'icon_food';
-        break;
       case 'shelter': 
         color = 0x0000ff; 
         iconKey = 'icon_shelter';
@@ -778,19 +860,17 @@ export class GameScene extends Scene {
       // Fallback: create procedural icon based on type
       beaconSprite = this.add.graphics();
       beaconSprite.fillStyle(color);
-      if (beacon.type === 'food') {
-        // Food: circle with cross
-        beaconSprite.fillCircle(0, 0, 8);
-        beaconSprite.lineStyle(2, 0xffffff);
-        beaconSprite.lineTo(-4, 0).moveTo(4, 0).lineTo(0, -4).moveTo(0, 4);
-      } else if (beacon.type === 'shelter') {
+      if (beacon.type === 'shelter') {
         // Shelter: house shape
         beaconSprite.fillTriangle(0, -8, -6, 2, 6, 2);
         beaconSprite.fillRect(-4, 2, 8, 6);
-      } else {
+      } else if (beacon.type === 'thermal') {
         // Thermal: flame/triangle shape
         beaconSprite.fillTriangle(0, -8, -4, 4, 4, 4);
         beaconSprite.fillEllipse(0, 2, 6, 4);
+      } else {
+        // Default: circle for unknown types
+        beaconSprite.fillCircle(0, 0, 8);
       }
     }
     container.add(beaconSprite);
@@ -884,6 +964,168 @@ export class GameScene extends Scene {
         }
       }
     }
+  }
+
+  private updateFoodSites() {
+    if (!this.gameState?.food_sites) return;
+
+    // Remove food site sprites that no longer exist
+    const currentFoodSiteIds = new Set(
+      this.gameState.food_sites.map((site, index) => `food_site_${index}`)
+    );
+    for (const [siteId, container] of this.foodSiteSprites.entries()) {
+      if (!currentFoodSiteIds.has(siteId)) {
+        container.destroy();
+        this.foodSiteSprites.delete(siteId);
+      }
+    }
+
+    // Update or create food site sprites
+    for (let i = 0; i < this.gameState.food_sites.length; i++) {
+      const foodSite = this.gameState.food_sites[i];
+      const siteId = `food_site_${i}`;
+      let container = this.foodSiteSprites.get(siteId);
+
+      if (!container) {
+        // Create new food site visual
+        container = this.createFoodSiteVisual(foodSite, foodSite.x, foodSite.y);
+        this.foodSiteSprites.set(siteId, container);
+        console.log(`🟢 Created food site visual at (${foodSite.x}, ${foodSite.y})`);
+      } else {
+        // Update existing food site position (in case it moves)
+        container.setPosition(foodSite.x, foodSite.y);
+      }
+    }
+  }
+
+  private createFoodSiteVisual(foodSite: any, x: number, y: number): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y);
+    container.setDepth(LAYER_DEPTHS.BEACONS); // Same depth as beacons for visibility
+
+    // Create the main food site circle (bright green to stand out)
+    const mainCircle = this.add.circle(0, 0, 12, 0x00ff00, 0.8);
+    container.add(mainCircle);
+
+    // Create inner food icon (darker green circle with white cross)
+    const innerCircle = this.add.circle(0, 0, 8, 0x006600, 1.0);
+    container.add(innerCircle);
+
+    // Add food cross symbol
+    const crossGraphics = this.add.graphics();
+    crossGraphics.lineStyle(2, 0xffffff, 1.0);
+    crossGraphics.lineBetween(-4, 0, 4, 0); // horizontal line
+    crossGraphics.lineBetween(0, -4, 0, 4); // vertical line
+    container.add(crossGraphics);
+
+    // Create influence radius ring to show feeding area
+    const radius = foodSite.radius || 80;
+    const radiusRing = this.add.circle(0, 0, radius, 0x00ff00, 0.06);
+    radiusRing.setStrokeStyle(2, 0x00ff00, 0.3);
+    container.add(radiusRing);
+
+    // Add gentle pulsing animation to make it obvious
+    this.tweens.add({
+      targets: mainCircle,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      alpha: 0.9,
+      duration: 2000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    // Add subtle pulsing to the radius ring
+    this.tweens.add({
+      targets: radiusRing,
+      alpha: 0.12,
+      scaleX: 1.05,
+      scaleY: 1.05,
+      duration: 3000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    return container;
+  }
+
+  private updateBirdFeedingEffects(agent: any, sprite: Phaser.GameObjects.Container): void {
+    if (!agent.alive || !this.gameState?.food_sites) return;
+
+    // Check if bird is within any food site radius
+    let isFeeding = false;
+    for (const foodSite of this.gameState.food_sites) {
+      const distance = Math.sqrt(
+        Math.pow(agent.x - foodSite.x, 2) + Math.pow(agent.y - foodSite.y, 2)
+      );
+      
+      const feedingRadius = (foodSite.radius || 80) * 0.8; // Slightly smaller than visual radius
+      if (distance < feedingRadius) {
+        isFeeding = true;
+        
+        // Create feeding particle effect if not already active
+        if (!sprite.getData('feedingEffect')) {
+          this.createFeedingParticleEffect(agent.x, agent.y);
+          sprite.setData('feedingEffect', true);
+          
+          // Add temporary glow effect to the bird while feeding
+          const glowEffect = this.add.circle(0, 0, 15, 0x00ff00, 0.3);
+          sprite.add(glowEffect);
+          sprite.setData('feedingGlow', glowEffect);
+          
+          // Pulse the glow
+          this.tweens.add({
+            targets: glowEffect,
+            alpha: 0.6,
+            scaleX: 1.3,
+            scaleY: 1.3,
+            duration: 800,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+          });
+          
+          console.log(`🟢 Bird ${agent.id} started feeding at (${agent.x.toFixed(0)}, ${agent.y.toFixed(0)})`);
+        }
+        break;
+      }
+    }
+
+    // Remove feeding effects if no longer feeding
+    if (!isFeeding && sprite.getData('feedingEffect')) {
+      sprite.setData('feedingEffect', false);
+      
+      // Remove glow effect
+      const glowEffect = sprite.getData('feedingGlow');
+      if (glowEffect) {
+        this.tweens.killTweensOf(glowEffect);
+        glowEffect.destroy();
+        sprite.setData('feedingGlow', null);
+      }
+      
+      console.log(`🟢 Bird ${agent.id} stopped feeding`);
+    }
+  }
+
+  private createFeedingParticleEffect(x: number, y: number): void {
+    // Create small green particles rising upward to indicate feeding
+    const particles = this.add.particles(x, y, 'spark', {
+      speed: { min: 10, max: 30 },
+      scale: { start: 0.3, end: 0 },
+      lifespan: 1000,
+      tint: [0x00ff00, 0x66ff66, 0xccffcc],
+      frequency: 100,
+      angle: { min: 260, max: 280 }, // Upward direction
+      quantity: 2
+    });
+    
+    particles.setDepth(LAYER_DEPTHS.BEACONS + 1); // Above food sites
+    
+    // Auto-destroy the particle effect after a short time
+    this.time.delayedCall(1500, () => {
+      particles.destroy();
+    });
   }
 
   private updateHazards() {
@@ -1151,9 +1393,9 @@ export class GameScene extends Scene {
     let color = 0xffffff;
     
     switch (type.toLowerCase()) {
-      case 'food': color = 0x00ff00; break;
       case 'shelter': color = 0x0000ff; break;
       case 'thermal': color = 0xff0000; break;
+      default: color = 0xffffff; break; // Default white for unknown types
     }
     
     // Simple circle beacon (no complex assets)
@@ -1209,9 +1451,8 @@ export class GameScene extends Scene {
     });
     this.beaconPanel.add(title);
     
-    // Beacon types with working texture support
+    // Beacon types with working texture support - FOOD REMOVED: Food is now environmental
     const beaconTypes = [
-      { type: 'food', name: 'Food', color: 0x00ff00, texture: 'icon_food' },
       { type: 'shelter', name: 'Shelter', color: 0x0000ff, texture: 'icon_shelter' },
       { type: 'thermal', name: 'Thermal', color: 0xff0000, texture: 'icon_thermal' }
     ];
@@ -1285,7 +1526,7 @@ export class GameScene extends Scene {
     // Clear previous selection
     this.beaconButtons.forEach((button, buttonType) => {
       const bg = button.list[0] as Phaser.GameObjects.Rectangle;
-      const color = buttonType === 'food' ? 0x00ff00 : buttonType === 'shelter' ? 0x0000ff : 0xff0000;
+      const color = buttonType === 'shelter' ? 0x0000ff : 0xff0000;
       if (buttonType !== type) {
         this.tweens.killTweensOf(bg);
         bg.setFillStyle(color, 0.3);
@@ -1297,7 +1538,7 @@ export class GameScene extends Scene {
     const selectedButton = this.beaconButtons.get(type);
     if (selectedButton) {
       const bg = selectedButton.list[0] as Phaser.GameObjects.Rectangle;
-      const color = type === 'food' ? 0x00ff00 : type === 'shelter' ? 0x0000ff : 0xff0000;
+      const color = type === 'shelter' ? 0x0000ff : 0xff0000;
       bg.setFillStyle(color, 0.8);
       
       // Add selection glow animation
@@ -1325,7 +1566,7 @@ export class GameScene extends Scene {
     // Clear all button highlights and stop animations
     this.beaconButtons.forEach((button, buttonType) => {
       const bg = button.list[0] as Phaser.GameObjects.Rectangle;
-      const color = buttonType === 'food' ? 0x00ff00 : buttonType === 'shelter' ? 0x0000ff : 0xff0000;
+      const color = buttonType === 'shelter' ? 0x0000ff : 0xff0000;
       this.tweens.killTweensOf(bg);
       bg.setFillStyle(color, 0.3);
       bg.setAlpha(1.0);
@@ -1708,7 +1949,7 @@ export class GameScene extends Scene {
     glow.fillCircle(0, 0, 8); // Glow radius
     glow.setBlendMode(Phaser.BlendModes.ADD); // Additive blending for glow
     
-    // Create bird shape (luminous glyph)
+    // Create bird shape (procedural graphics - reverted as requested)
     const bird = this.add.graphics();
     bird.lineStyle(1, 0xffffff, 0.8);
     bird.fillStyle(0xffffff, 0.9);
@@ -1723,6 +1964,28 @@ export class GameScene extends Scene {
     bird.fillPath();
     bird.strokePath();
     
+    // NEW: Gender indicator (small symbol above bird)
+    const genderSymbol = this.add.text(0, -8, '', {
+      fontSize: '8px',
+      color: '#ffffff',
+      align: 'center'
+    });
+    genderSymbol.setOrigin(0.5);
+    genderSymbol.setAlpha(0.8);
+    
+    // NEW: Generation indicator (small text below bird) 
+    const generationText = this.add.text(0, 6, '', {
+      fontSize: '6px',
+      color: '#ffffff',
+      align: 'center'
+    });
+    generationText.setOrigin(0.5);
+    generationText.setAlpha(0.7);
+    
+    // NEW: Leadership crown (only shown for high-leadership birds)
+    const leadershipCrown = this.add.graphics();
+    leadershipCrown.setVisible(false);
+    
     // Add subtle pulsing animation
     this.tweens.add({
       targets: glow,
@@ -1733,9 +1996,9 @@ export class GameScene extends Scene {
       ease: 'Sine.easeInOut'
     });
     
-    // PERFORMANCE: Disabled bird trail particles to fix 2fps issue
-    // TODO: Re-enable with better optimization or only for featured birds
-    birdContainer.add([glow, bird]);
+    // Add all components to container
+    // Order: glow (0), bird (1), genderSymbol (2), generationText (3), leadershipCrown (4)
+    birdContainer.add([glow, bird, genderSymbol, generationText, leadershipCrown]);
     
     birdContainer.setDepth(LAYER_DEPTHS.AGENTS);
     
@@ -1771,6 +2034,74 @@ export class GameScene extends Scene {
     }
   }
 
+  private updateBirdGeneticDisplay(container: Phaser.GameObjects.Container, agent: Agent) {
+    // Get the genetic display components
+    const genderSymbol = container.list[2] as Phaser.GameObjects.Text;
+    const generationText = container.list[3] as Phaser.GameObjects.Text;
+    const leadershipCrown = container.list[4] as Phaser.GameObjects.Graphics;
+    
+    if (genderSymbol && agent.gender) {
+      // Display gender symbol with color coding
+      const symbol = agent.gender === 'male' ? '♂' : '♀';
+      const genderColor = agent.gender === 'male' ? '#4488ff' : '#ff4488';
+      
+      genderSymbol.setText(symbol);
+      genderSymbol.setColor(genderColor);
+    }
+    
+    if (generationText && agent.generation !== undefined) {
+      // Display generation (G0, G1, G2, etc.)
+      generationText.setText(`G${agent.generation}`);
+      
+      // Color code by generation (newer = brighter)
+      const generationAlpha = 0.5 + (agent.generation * 0.1);
+      generationText.setAlpha(Math.min(1.0, generationAlpha));
+    }
+    
+    if (leadershipCrown && agent.genetics?.leadership) {
+      // Show leadership crown for high-leadership birds
+      const showCrown = agent.genetics.leadership > 0.7;
+      leadershipCrown.setVisible(showCrown);
+      
+      if (showCrown) {
+        leadershipCrown.clear();
+        leadershipCrown.lineStyle(1, 0xffdd00, 0.9);
+        leadershipCrown.fillStyle(0xffdd00, 0.8);
+        
+        // Draw simple crown shape above bird
+        leadershipCrown.beginPath();
+        leadershipCrown.moveTo(-4, -12);
+        leadershipCrown.lineTo(-2, -16);
+        leadershipCrown.lineTo(0, -14);
+        leadershipCrown.lineTo(2, -16);
+        leadershipCrown.lineTo(4, -12);
+        leadershipCrown.lineTo(-4, -12);
+        leadershipCrown.closePath();
+        leadershipCrown.fillPath();
+        leadershipCrown.strokePath();
+      }
+    }
+  }
+
+  private blendColors(color1: number, color2: number, factor: number): number {
+    // Extract RGB components
+    const r1 = (color1 >> 16) & 0xff;
+    const g1 = (color1 >> 8) & 0xff;
+    const b1 = color1 & 0xff;
+    
+    const r2 = (color2 >> 16) & 0xff;
+    const g2 = (color2 >> 8) & 0xff;
+    const b2 = color2 & 0xff;
+    
+    // Blend colors
+    const r = Math.round(r1 * (1 - factor) + r2 * factor);
+    const g = Math.round(g1 * (1 - factor) + g2 * factor);
+    const b = Math.round(b1 * (1 - factor) + b2 * factor);
+    
+    // Combine back to single color
+    return (r << 16) | (g << 8) | b;
+  }
+
   private createHazardWithParticles(type: string, x: number, y: number, radius: number): Phaser.GameObjects.Container {
     const container = this.add.container(x, y);
     
@@ -1778,58 +2109,80 @@ export class GameScene extends Scene {
     const graphics = this.add.graphics();
     
     if (type.toLowerCase().includes('tornado')) {
-      // Enhanced tornado graphics with spiraling lines (PERFORMANCE: Removed particles)
-      graphics.lineStyle(4, 0xff0000, 0.9);
-      graphics.strokeCircle(0, 0, radius);
-      graphics.lineStyle(3, 0xffaa00, 0.7);
-      graphics.strokeCircle(0, 0, radius * 0.7);
-      graphics.lineStyle(2, 0xff6600, 0.5);
-      graphics.strokeCircle(0, 0, radius * 0.4);
-      
-      // Add spiral lines for tornado effect
-      const spiralPoints = [];
-      for (let i = 0; i < 16; i++) {
-        const angle = (i / 16) * Math.PI * 2;
-        const spiralRadius = radius * 0.3 + (radius * 0.4) * (i / 16);
-        const x = Math.cos(angle + this.time.now * 0.002) * spiralRadius;
-        const y = Math.sin(angle + this.time.now * 0.002) * spiralRadius;
-        spiralPoints.push(x, y);
+      // Use storm sprite if available
+      if (this.textures.exists('tornado_sprite')) {
+        // Use actual storm sprite - sized EXACTLY to match the hazard circle
+        const stormSprite = this.add.image(0, 0, 'tornado_sprite');
+        
+        // Get the actual sprite dimensions
+        const spriteWidth = stormSprite.width;
+        const spriteHeight = stormSprite.height;
+        const spriteDiameter = Math.max(spriteWidth, spriteHeight);
+        
+        // Scale sprite so its visual diameter exactly matches the hazard radius circle
+        const targetDiameter = radius * 2; // Convert radius to diameter
+        const scale = targetDiameter / spriteDiameter;
+        
+        stormSprite.setScale(scale);
+        stormSprite.setAlpha(0.7);
+        stormSprite.setBlendMode(Phaser.BlendModes.MULTIPLY);
+        
+        // Add animated rotation for storm effect
+        this.tweens.add({
+          targets: stormSprite,
+          rotation: Math.PI * 2,
+          duration: 4000,
+          repeat: -1,
+          ease: 'Linear'
+        });
+        
+        container.add([stormSprite]);
+      } else {
+        // Fallback: Enhanced tornado graphics with spiraling lines
+        graphics.lineStyle(4, 0xff0000, 0.9);
+        graphics.strokeCircle(0, 0, radius);
+        graphics.lineStyle(3, 0xffaa00, 0.7);
+        graphics.strokeCircle(0, 0, radius * 0.7);
+        graphics.lineStyle(2, 0xff6600, 0.5);
+        graphics.strokeCircle(0, 0, radius * 0.4);
+        
+        // Add spiral lines for tornado effect
+        const spiralPoints = [];
+        for (let i = 0; i < 16; i++) {
+          const angle = (i / 16) * Math.PI * 2;
+          const spiralRadius = radius * 0.3 + (radius * 0.4) * (i / 16);
+          const x = Math.cos(angle + this.time.now * 0.002) * spiralRadius;
+          const y = Math.sin(angle + this.time.now * 0.002) * spiralRadius;
+          spiralPoints.push(x, y);
+        }
+        graphics.lineStyle(2, 0xffffff, 0.3);
+        graphics.strokePoints(spiralPoints, false, true);
+        
+        container.add([graphics]);
       }
-      graphics.lineStyle(2, 0xffffff, 0.3);
-      graphics.strokePoints(spiralPoints, false, true);
-      
-      // Add central icon
-      graphics.lineStyle(3, 0xffffff, 0.8);
-      graphics.strokePath();
-      graphics.beginPath();
-      graphics.moveTo(-8, -8);
-      graphics.lineTo(8, 8);
-      graphics.moveTo(-8, 8);
-      graphics.lineTo(8, -8);
-      graphics.strokePath();
-      
-      container.add([graphics]);
       
     } else if (type.toLowerCase().includes('predator')) {
       // Enhanced predator graphics with motion trails (PERFORMANCE: Removed particles)
-      graphics.fillStyle(0x990000, 0.6);
-      graphics.fillCircle(0, 0, radius);
-      graphics.lineStyle(3, 0xff0000, 0.9);
-      graphics.strokeCircle(0, 0, radius);
+      // Fixed: Predators should be bird-sized, not using the large hazard radius
+      const predatorSize = 8; // Same size as birds
+      graphics.fillStyle(0x990000, 0.8);
+      graphics.fillCircle(0, 0, predatorSize);
+      graphics.lineStyle(2, 0xff0000, 1.0);
+      graphics.strokeCircle(0, 0, predatorSize);
       
-      // Add predator eyes and teeth
+      // Add predator eyes and teeth (scaled to bird size)
       graphics.fillStyle(0xff0000, 1.0);
-      graphics.fillCircle(-radius * 0.3, -radius * 0.2, 3);
-      graphics.fillCircle(radius * 0.3, -radius * 0.2, 3);
+      graphics.fillCircle(-predatorSize * 0.3, -predatorSize * 0.2, 2);
+      graphics.fillCircle(predatorSize * 0.3, -predatorSize * 0.2, 2);
       
-      // Add angular lines for teeth/claws
-      graphics.lineStyle(2, 0xffffff, 0.8);
-      for (let i = 0; i < 8; i++) {
-        const angle = (i / 8) * Math.PI * 2;
-        const x1 = Math.cos(angle) * radius * 0.7;
-        const y1 = Math.sin(angle) * radius * 0.7;
-        const x2 = Math.cos(angle) * radius * 0.9;
-        const y2 = Math.sin(angle) * radius * 0.9;
+      // Add angular lines for teeth/claws (scaled to bird size)
+      graphics.lineStyle(1, 0xffffff, 0.8);
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const x1 = Math.cos(angle) * predatorSize * 0.7;
+        const y1 = Math.sin(angle) * predatorSize * 0.7;
+        const x2 = Math.cos(angle) * predatorSize * 0.9;
+        const y2 = Math.sin(angle) * predatorSize * 0.9;
         graphics.lineBetween(x1, y1, x2, y2);
       }
       
@@ -1880,5 +2233,249 @@ export class GameScene extends Scene {
 
   public getSelectedBeaconType(): string | null {
     return this.selectedBeaconType;
+  }
+
+  // NEW: Bird inspection methods
+  private checkBirdInspection(worldX: number, worldY: number) {
+    if (!this.gameState?.agents) return;
+    
+    const clickRadius = 25; // Pixels - how close click must be to bird
+    let closestBird: Agent | null = null;
+    let closestDistance = Infinity;
+    
+    // Find closest bird to click
+    for (const agent of this.gameState.agents) {
+      if (!agent.alive) continue;
+      
+      const distance = Math.sqrt(
+        Math.pow(agent.x - worldX, 2) + 
+        Math.pow(agent.y - worldY, 2)
+      );
+      
+      if (distance < clickRadius && distance < closestDistance) {
+        closestDistance = distance;
+        closestBird = agent;
+      }
+    }
+    
+    if (closestBird) {
+      this.showBirdInspection(closestBird);
+      console.log('Bird inspection triggered for bird:', closestBird.id);
+    } else {
+      // Hide inspection panel if clicked elsewhere
+      this.hideBirdInspection();
+    }
+  }
+  
+  private showBirdInspection(agent: Agent) {
+    // Remove existing panel
+    if (this.birdInspectionPanel) {
+      this.birdInspectionPanel.destroy();
+    }
+    
+    this.inspectedBirdId = agent.id;
+    
+    // Create inspection panel
+    const panelWidth = 280;
+    const panelHeight = 320;
+    
+    const panel = this.add.container(100, 100);
+    panel.setDepth(LAYER_DEPTHS.UI + 10); // Above other UI
+    
+    // Background
+    const bg = this.add.graphics();
+    bg.fillStyle(0x0a0a0a, 0.95);
+    bg.lineStyle(3, agent.gender === 'male' ? 0x4488ff : 0xff4488, 0.9);
+    bg.fillRoundedRect(0, 0, panelWidth, panelHeight, 10);
+    bg.strokeRoundedRect(0, 0, panelWidth, panelHeight, 10);
+    panel.add(bg);
+    
+    // Header with bird info
+    const genderSymbol = agent.gender === 'male' ? '♂' : '♀';
+    const genderColor = agent.gender === 'male' ? '#4488ff' : '#ff4488';
+    
+    const headerText = this.add.text(panelWidth / 2, 20, `${genderSymbol} Bird ${agent.id}`, {
+      fontSize: '16px',
+      color: genderColor,
+      fontStyle: 'bold'
+    });
+    headerText.setOrigin(0.5);
+    panel.add(headerText);
+    
+    // Generation info
+    const genText = this.add.text(panelWidth / 2, 40, 
+      `Generation ${agent.generation || 0}`, {
+      fontSize: '12px',
+      color: '#ffdd44'
+    });
+    genText.setOrigin(0.5);
+    panel.add(genText);
+    
+    // Status info
+    let yPos = 70;
+    
+    // Energy and stress
+    const energyText = this.add.text(15, yPos, `Energy: ${Math.round(agent.energy)}/100`, {
+      fontSize: '11px',
+      color: agent.energy > 60 ? '#44ff44' : agent.energy > 30 ? '#ffaa44' : '#ff4444'
+    });
+    panel.add(energyText);
+    
+    const stressText = this.add.text(150, yPos, `Stress: ${Math.round(agent.stress)}/100`, {
+      fontSize: '11px',
+      color: agent.stress > 70 ? '#ff4444' : agent.stress > 40 ? '#ffaa44' : '#44ff44'
+    });
+    panel.add(stressText);
+    yPos += 25;
+    
+    // Stats
+    if (agent.fitness !== undefined) {
+      const fitnessText = this.add.text(15, yPos, `Fitness: ${agent.fitness.toFixed(2)}`, {
+        fontSize: '11px',
+        color: '#88ff88'
+      });
+      panel.add(fitnessText);
+    }
+    
+    if (agent.survived_levels !== undefined) {
+      const survivalText = this.add.text(150, yPos, `Survived: ${agent.survived_levels} levels`, {
+        fontSize: '11px',
+        color: '#88ff88'
+      });
+      panel.add(survivalText);
+    }
+    yPos += 25;
+    
+    // Close calls and leadership time
+    if (agent.close_calls !== undefined) {
+      const closeCallText = this.add.text(15, yPos, `Close calls: ${agent.close_calls}`, {
+        fontSize: '11px',
+        color: '#ffaa44'
+      });
+      panel.add(closeCallText);
+    }
+    
+    if (agent.leadership_time !== undefined) {
+      const leadTime = agent.leadership_time.toFixed(1);
+      const leadText = this.add.text(150, yPos, `Led: ${leadTime}s`, {
+        fontSize: '11px',
+        color: '#ffdd44'
+      });
+      panel.add(leadText);
+    }
+    yPos += 35;
+    
+    // Genetics section
+    if (agent.genetics) {
+      const geneticsHeader = this.add.text(15, yPos, 'Genetic Traits:', {
+        fontSize: '12px',
+        color: '#aa44ff',
+        fontStyle: 'bold'
+      });
+      panel.add(geneticsHeader);
+      yPos += 20;
+      
+      const traits = [
+        { key: 'hazard_awareness', name: 'Hazard Awareness', color: '#ff4444' },
+        { key: 'energy_efficiency', name: 'Energy Efficiency', color: '#44ff44' },
+        { key: 'flock_cohesion', name: 'Flock Cohesion', color: '#4444ff' },
+        { key: 'beacon_sensitivity', name: 'Beacon Sensitivity', color: '#ffaa44' },
+        { key: 'stress_resilience', name: 'Stress Resilience', color: '#aa44ff' },
+        { key: 'leadership', name: 'Leadership', color: '#ffdd44' }
+      ];
+      
+      for (const trait of traits) {
+        const genetics = agent.genetics as any; // Type assertion to allow indexing
+        if (genetics[trait.key] !== undefined) {
+          const value = genetics[trait.key];
+          const percentage = Math.round(value * 100);
+          
+          // Trait name
+          const traitText = this.add.text(15, yPos, trait.name, {
+            fontSize: '10px',
+            color: '#cccccc'
+          });
+          panel.add(traitText);
+          
+          // Trait bar background
+          const barBg = this.add.graphics();
+          barBg.fillStyle(0x333333, 0.5);
+          barBg.fillRect(140, yPos - 4, 100, 10);
+          panel.add(barBg);
+          
+          // Trait bar
+          const traitBar = this.add.graphics();
+          traitBar.fillStyle(parseInt(trait.color.replace('#', '0x')), 0.8);
+          traitBar.fillRect(140, yPos - 4, Math.max(2, 100 * value), 10);
+          panel.add(traitBar);
+          
+          // Percentage text
+          const percentText = this.add.text(250, yPos, `${percentage}%`, {
+            fontSize: '9px',
+            color: '#ffffff'
+          });
+          percentText.setOrigin(1, 0);
+          panel.add(percentText);
+          
+          yPos += 18;
+        }
+      }
+    }
+    
+    // Close button
+    const closeBtn = this.add.text(panelWidth - 15, 15, '×', {
+      fontSize: '20px',
+      color: '#ff4444'
+    });
+    closeBtn.setOrigin(0.5);
+    closeBtn.setInteractive({ cursor: 'pointer' });
+    closeBtn.on('pointerdown', () => this.hideBirdInspection());
+    panel.add(closeBtn);
+    
+    // Position panel near bird but keep on screen
+    const birdSprite = this.agentSprites.get(agent.id.toString());
+    if (birdSprite) {
+      let panelX = birdSprite.x + 30;
+      let panelY = birdSprite.y - panelHeight / 2;
+      
+      // Keep panel on screen
+      const camera = this.cameras.main;
+      panelX = Math.max(10, Math.min(panelX, camera.width - panelWidth - 10));
+      panelY = Math.max(10, Math.min(panelY, camera.height - panelHeight - 10));
+      
+      panel.setPosition(panelX, panelY);
+    }
+    
+    this.birdInspectionPanel = panel;
+    
+    // Auto-hide after 10 seconds
+    this.time.delayedCall(10000, () => {
+      this.hideBirdInspection();
+    });
+  }
+  
+  private hideBirdInspection() {
+    if (this.birdInspectionPanel) {
+      this.birdInspectionPanel.destroy();
+      this.birdInspectionPanel = undefined;
+      this.inspectedBirdId = undefined;
+    }
+  }
+  
+  // Update the inspection panel if it's showing
+  private updateBirdInspection() {
+    if (!this.birdInspectionPanel || this.inspectedBirdId === undefined) return;
+    
+    // Find the inspected bird in current game state
+    const inspectedBird = this.gameState?.agents.find(a => a.id === this.inspectedBirdId);
+    
+    if (!inspectedBird || !inspectedBird.alive) {
+      // Bird is gone, hide panel
+      this.hideBirdInspection();
+      return;
+    }
+    
+    // Refresh the panel with updated data
+    this.showBirdInspection(inspectedBird);
   }
 }
