@@ -306,6 +306,9 @@ class SimulationServer:
         # Reset migration leg counter for new levels starting with W1-1
         if level_id == "W1-1":
             self.current_leg = 1
+            
+        # Clear any existing beacons from previous level
+        logger.info("🧹 Clearing beacons from previous level")
         
         # Create evolved simulation with current breed and migration scaling
         import random
@@ -534,9 +537,9 @@ class SimulationServer:
             if self.current_leg < self.max_legs:
                 self.current_leg += 1
                 
-                # Preserve survivors for next leg
-                survivors = [agent for agent in self.simulation.agents if agent.alive]
-                logger.info(f"🔄 Continuing to leg {self.current_leg} with {len(survivors)} survivors")
+                # Preserve survivors for next leg - count arrivals, not remaining alive agents
+                arrivals_count = self.simulation.arrivals
+                logger.info(f"🔄 Continuing to leg {self.current_leg} with {arrivals_count} survivors (arrived at destination)")
                 
                 # Generate next level name
                 leg_names = ["A→B", "B→C", "C→D", "D→Z"]
@@ -756,9 +759,23 @@ class SimulationServer:
                         self.paused = True  # Ensure game pauses even if error occurs
                         
                 elif self.simulation.game_over and not self.simulation.victory:
-                    # Level failed
+                    # Level failed - send failure message to client
                     logger.info("Level failed - pausing")
                     self.paused = True
+                    
+                    # Send failure message to client
+                    await self.broadcast_message({
+                        "type": "level_failed",
+                        "data": {
+                            "reason": "All birds lost",
+                            "survivors": self.simulation.arrivals,
+                            "losses": self.simulation.losses,
+                            "level": self.simulation.config.level,
+                            "current_leg": self.current_leg,
+                            "total_legs": self.max_legs
+                        }
+                    })
+                    logger.info("Level failure message sent to client")
                 
                 # Small yield for other tasks
                 await asyncio.sleep(0.001)

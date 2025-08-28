@@ -823,12 +823,21 @@ Other:
     startButton.setSize(220, 70);
     startButton.setInteractive(new Phaser.Geom.Rectangle(-110, -35, 220, 70), Phaser.Geom.Rectangle.Contains);
     startButton.on('pointerdown', () => {
-      if (this.isCompletionPanel) {
+      // Get current button text to determine action
+      const buttonText = startButton.list.find((child: any) => child.type === 'Text');
+      const buttonTextStr = buttonText ? (buttonText as any).text : '';
+      
+      if (buttonTextStr.includes('CONTINUE')) {
         console.log('🎮 CONTINUE TO NEXT LEG button clicked!');
         this.hideLevelPanel();
         this.isCompletionPanel = false;
         console.log('🎮 Emitting continueToNextLeg event...');
         this.events.emit('continueToNextLeg');
+      } else if (buttonTextStr.includes('RETRY')) {
+        console.log('🔄 RETRY LEVEL button clicked!');
+        this.hideLevelPanel();
+        console.log('🔄 Emitting startLevel event for retry...');
+        this.events.emit('startLevel');
       } else {
         console.log('🎮 START LEVEL button clicked!');
         this.hideLevelPanel();
@@ -858,7 +867,15 @@ Other:
     
     this.levelPanel = panel;
     this.levelPanel.setVisible(false); // Hidden by default
-    this.hudContainer.add(panel);
+    
+    // Ensure hudContainer exists before adding
+    if (this.hudContainer) {
+      this.hudContainer.add(panel);
+    } else {
+      console.warn('⚠️ hudContainer not initialized, adding panel directly to scene');
+      // Add directly to scene if hudContainer not ready
+      this.add.existing(panel);
+    }
   }
 
   private hideLevelPanel() {
@@ -1207,6 +1224,72 @@ Other:
     
     // Show the panel
     this.levelPanel.setVisible(true);
+  }
+
+  public showFailurePanel(failureData: any) {
+    console.log('💀 UIScene.showFailurePanel called:', failureData);
+    
+    // Mark this as a failure panel (reuse completion panel structure)
+    this.isCompletionPanel = false; // This will be a retry, not continue
+    
+    // Create failure panel similar to completion panel
+    if (!this.levelPanel) {
+      this.createLevelPanel();
+    }
+    
+    // Update the panel content for failure
+    const levelTitle = this.levelPanel.getData('levelTitle');
+    if (levelTitle) {
+      levelTitle.setText('MIGRATION FAILED');
+      levelTitle.setColor('#ff4444'); // Red for failure
+    }
+    
+    // Update subtitle with failure reason
+    const subtitle = this.levelPanel.getData('subtitle');
+    if (subtitle) {
+      subtitle.setText(`${failureData.reason} - ${failureData.losses} birds lost`);
+    }
+    
+    // Update population counts (show losses)
+    const maleCount = this.levelPanel.getData('maleCount');
+    const femaleCount = this.levelPanel.getData('femaleCount');
+    if (maleCount && femaleCount) {
+      maleCount.setText(`${failureData.losses} Birds Lost`);
+      femaleCount.setText(`${failureData.survivors} Survivors`);
+    }
+    
+    // Change button to "RETRY LEVEL"
+    this.updateButtonForFailure();
+    
+    // Show the panel
+    this.levelPanel.setVisible(true);
+  }
+
+  private updateButtonForFailure() {
+    // Find the button and update text to "RETRY LEVEL"
+    for (let child of this.levelPanel.list) {
+      if (child.type === 'Container') {
+        const container = child as Phaser.GameObjects.Container;
+        for (let subChild of container.list) {
+          if (subChild.type === 'Text' && ((subChild as any).text.includes('START') || (subChild as any).text.includes('CONTINUE'))) {
+            // Found the button text - update it
+            (subChild as any).setText('RETRY LEVEL');
+            
+            // Update button background to red for retry
+            const buttonBg = container.list[0];
+            if (buttonBg.type === 'Graphics') {
+              const graphics = buttonBg as Phaser.GameObjects.Graphics;
+              graphics.clear();
+              graphics.fillStyle(0xaa4444, 0.8);
+              graphics.lineStyle(2, 0xcc6666, 1.0);
+              graphics.fillRoundedRect(-100, -25, 200, 50, 10);
+              graphics.strokeRoundedRect(-100, -25, 200, 50, 10);
+            }
+            return;
+          }
+        }
+      }
+    }
   }
 
   private updateButtonForCompletion() {

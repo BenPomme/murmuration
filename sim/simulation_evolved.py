@@ -597,18 +597,39 @@ class EvolvedSimulation:
         for pulse in self.active_pulses:
             pulse['remaining'] -= dt
         
-        # Check win/loss
-        if self.arrivals >= self.config.target_arrivals:
-            self.victory = True
+        # Check win/loss - Victory when migration is complete (no more living birds can reach destination)
+        if self.arrivals > 0 and not self.victory:
+            # Check if all remaining birds are too exhausted to continue or if reasonable time has passed
+            exhausted_birds = sum(1 for agent in alive_agents if agent.energy < 20)
+            remaining_healthy = len(alive_agents) - exhausted_birds
+            
+            # Victory conditions:
+            # 1. Any arrivals AND no healthy birds left to continue
+            # 2. Any arrivals AND reasonable time elapsed (60+ seconds)
+            time_elapsed = time.time() - self.start_time
+            
+            if remaining_healthy == 0 or time_elapsed > 60:
+                self.victory = True
+                self.game_over = True
+                self.breed.successful_migrations += 1
+                logger.info(f"VICTORY! {self.arrivals} birds completed migration!")
+        elif not self.victory and len(alive_agents) == 0 and self.arrivals == 0:
+            # Complete failure - all birds dead with no arrivals
             self.game_over = True
-            self.breed.successful_migrations += 1
-            logger.info(f"VICTORY! Breed '{self.breed.name}' succeeds!")
-        elif self.losses > self.config.max_losses:
+            logger.info(f"COMPLETE FAILURE! All {self.losses} birds lost before reaching destination")
+        elif not self.victory and self.losses > self.config.max_losses:
+            # Only trigger defeat if victory hasn't been achieved and we haven't checked complete failure
             self.game_over = True
-            logger.info(f"DEFEAT! Breed needs more training")
-        elif time.time() - self.start_time > self.config.time_limit_seconds:
-            self.game_over = True
-            logger.info(f"TIME UP! Partial success: {self.arrivals} arrivals")
+            logger.info(f"DEFEAT! Too many losses: {self.losses}")
+        elif not self.victory and time.time() - self.start_time > self.config.time_limit_seconds:
+            # Time up - check if any birds made it
+            if self.arrivals > 0:
+                self.victory = True
+                self.game_over = True
+                logger.info(f"TIME UP! But {self.arrivals} birds made it - SUCCESS!")
+            else:
+                self.game_over = True
+                logger.info(f"TIME UP! No birds reached destination - FAILURE!")
         
         # PHASE 2: Update hazard positions (moving storms and predator chases)
         self._update_hazard_positions(dt)

@@ -156,6 +156,10 @@ class MurmurationGame {
         console.log('🏆 Level completed:', data.data);
         // Show completion panel with option to continue to next leg
         this.uiScene.showCompletionPanel(data.data);
+      } else if (data.type === 'level_failed') {
+        console.log('💀 Level failed:', data.data);
+        // Show failure panel with option to retry
+        this.uiScene.showFailurePanel(data.data);
       } else if (data.type === 'error') {
         console.error('Server error:', data.message);
       }
@@ -193,8 +197,8 @@ class MurmurationGame {
       console.log('🎮 Level start requested');
       // Set flag to prevent level panel from showing again
       this.levelStartRequested = true;
-      // Start a fresh level instead of just resuming
-      this.wsClient.loadLevel(0); // Start Level 1 (index 0)
+      // Resume the game that's already loaded but paused
+      this.wsClient.resumeGame();
     });
 
     // Handle continue to next leg events  
