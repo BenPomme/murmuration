@@ -56,15 +56,17 @@ class SimulationServer:
         self.victory_processed = False  # Track if current victory has been processed
         self.current_leg = 1  # Track current migration leg (1 = A->B, 2 = B->C, etc.)
         self.max_legs = 4  # Total legs in migration (A->B->C->D->Z)
+        self.current_migration = 1  # Track complete migrations (W1, W2, W3, W4)
+        self.max_migrations = 4  # Total migrations in campaign
+        self.last_state = None  # Cache the last simulation state to avoid duplicate step() calls
         
     async def register(self, websocket: ServerConnection) -> None:
         """Register a new client."""
         self.clients.append(websocket)
         logger.info("Client connected", clients=len(self.clients))
         
-        # Send initial state
-        if self.simulation:
-            await self.send_state(websocket)
+        # Always send initial state (will auto-load level if needed)
+        await self.send_state(websocket)
             
     async def unregister(self, websocket: ServerConnection) -> None:
         """Unregister a client."""
@@ -76,6 +78,11 @@ class SimulationServer:
         """Send current simulation state to client."""
         # PHASE 2: Prioritize our enhanced simulation, then genetic, then unified as fallback
         if self.simulation:
+            # Check if the simulation has already ended - if so, reset for new client
+            if self.simulation.game_over:
+                logger.info("Existing simulation already ended - starting fresh for new client")
+                await self.load_level("W1-1")
+                return
             await self.send_evolved_state(websocket)
             return
         elif self.genetic_sim:
@@ -94,8 +101,13 @@ class SimulationServer:
         if not self.simulation:
             return
             
-        # Get current game state
-        state = self.simulation.step()
+        # Use cached state if available, otherwise get current state without stepping
+        if self.last_state:
+            state = self.last_state
+        else:
+            # Get current state without stepping (for initial connection)
+            state = self.simulation.get_current_state()
+            self.last_state = state
         
         # Convert agents to serializable format
         agents_data = []
@@ -280,11 +292,12 @@ class SimulationServer:
         except Exception as e:
             logger.error("Message handling error", error=str(e))
             
-    async def load_level(self, level_id: str) -> None:
+    async def load_level(self, level_id: str, survivor_count: Optional[int] = None) -> None:
         """Load a level and start simulation.
         
         Args:
             level_id: Level identifier (e.g., "W1-1")
+            survivor_count: Number of survivors to start with (defaults to full population)
         """
         logger.info("Loading level", level=level_id)
         
@@ -302,10 +315,12 @@ class SimulationServer:
         self.paused = False
         self.speed = 1.0
         self.victory_processed = False  # Reset victory flag for new level
+        self.last_state = None  # Clear cached state for new level
         
-        # Reset migration leg counter for new levels starting with W1-1
+        # Reset migration counters for new campaigns starting with W1-1
         if level_id == "W1-1":
             self.current_leg = 1
+            self.current_migration = 1
             
         # Clear any existing beacons from previous level
         logger.info("🧹 Clearing beacons from previous level")
@@ -314,12 +329,8 @@ class SimulationServer:
         import random
         seed = random.randint(1, 100000)  # Different seed each play for variety
         
-        # Get migration number for scaling difficulty
-        migration_number = 1
-        if self.migration_manager.current_journey:
-            migration_number = self.migration_manager.current_journey.current_leg + 1
-        
-        config = GameConfig.from_level(level_id, seed=seed, breed=self.current_breed, migration_number=migration_number)
+        # Use current migration for difficulty scaling (not leg number)
+        config = GameConfig.from_level(level_id, seed=seed, breed=self.current_breed, migration_number=self.current_migration, n_agents=survivor_count)
         
         self.simulation = EvolvedSimulation(config)
         self.running = True
@@ -539,7 +550,11 @@ class SimulationServer:
                 
                 # Preserve survivors for next leg - count arrivals, not remaining alive agents
                 arrivals_count = self.simulation.arrivals
-                logger.info(f"🔄 Continuing to leg {self.current_leg} with {arrivals_count} survivors (arrived at destination)")
+                # Ensure minimum survivor count (at least 20 birds for playability)
+                min_survivors = 20
+                survivor_count = max(arrivals_count, min_survivors)
+                
+                logger.info(f"🔄 Continuing to leg {self.current_leg} with {survivor_count} birds ({arrivals_count} actual survivors)")
                 
                 # Generate next level name
                 leg_names = ["A→B", "B→C", "C→D", "D→Z"]
@@ -548,8 +563,8 @@ class SimulationServer:
                 
                 logger.info(f"🔄 Loading next level: {next_level} ({leg_name})")
                 
-                # Load next leg and restart simulation
-                await self.load_level(next_level)
+                # Load next leg and restart simulation with survivors (or minimum)
+                await self.load_level(next_level, survivor_count)
                 self.running = True  # Restart simulation for next leg
                 
                 # Send continuation message
@@ -559,20 +574,48 @@ class SimulationServer:
                         "current_leg": self.current_leg,
                         "total_legs": self.max_legs,
                         "level_name": leg_name,
-                        "survivors": len(survivors)
+                        "survivors": arrivals_count
                     }
                 })
                 logger.info(f"🔄 Migration continued to leg {self.current_leg}")
             else:
-                # Migration complete!
-                logger.info("🏁 Migration complete! All legs finished.")
-                await self.broadcast_message({
-                    "type": "migration_complete",
-                    "data": {
-                        "message": "Migration complete! Your flock has reached the final destination.",
-                        "final_survivors": len([a for a in self.simulation.agents if a.alive])
-                    }
-                })
+                # Migration complete! Check if campaign continues
+                if self.current_migration < self.max_migrations:
+                    # Advance to next migration
+                    self.current_migration += 1
+                    self.current_leg = 1  # Reset legs for new migration
+                    
+                    # Evolve breed for next migration
+                    self.simulation.evolve_breed()
+                    self.current_breed = self.simulation.breed
+                    
+                    survivors = len([a for a in self.simulation.agents if a.alive])
+                    logger.info(f"🏁 Migration {self.current_migration-1} complete! Advancing to Migration {self.current_migration} with {survivors} survivors")
+                    
+                    # Start next migration
+                    next_level = f"W{self.current_migration}-1"
+                    await self.load_level(next_level, survivors)
+                    
+                    await self.broadcast_message({
+                        "type": "migration_advanced",
+                        "data": {
+                            "message": f"Migration {self.current_migration-1} complete! Starting Migration {self.current_migration}",
+                            "current_migration": self.current_migration,
+                            "max_migrations": self.max_migrations,
+                            "survivors": survivors
+                        }
+                    })
+                else:
+                    # Campaign complete!
+                    logger.info("🎉 Campaign complete! All migrations finished.")
+                    await self.broadcast_message({
+                        "type": "campaign_complete",
+                        "data": {
+                            "message": "Campaign complete! Your flock has mastered all migration routes!",
+                            "final_survivors": len([a for a in self.simulation.agents if a.alive]),
+                            "final_generation": self.current_breed.generation
+                        }
+                    })
         else:
             logger.warning("No simulation running - cannot continue migration")
     
@@ -720,8 +763,8 @@ class SimulationServer:
         while True:  # Run forever
             # PHASE 2: Handle Phase 2 evolved simulation first (priority)
             if self.simulation and not self.paused and self.running:
-                # CRITICAL FIX: Actually run the simulation step
-                self.simulation.step()
+                # CRITICAL FIX: Actually run the simulation step and cache the state
+                self.last_state = self.simulation.step()
                 
                 # Check for level completion and migration progression
                 if self.simulation.game_over and self.simulation.victory and not self.victory_processed:
@@ -859,10 +902,10 @@ class SimulationServer:
                     # Stop updating but keep simulation for state display
                     self.paused = True
                     
-            # Broadcast state at target FPS
+            # Broadcast state at target FPS (only when not paused)
             current_time = time.time()
             if current_time - last_update >= frame_time:
-                if self.simulation or self.genetic_sim or self.unified_sim:  # Broadcast if any sim exists
+                if not self.paused and (self.simulation or self.genetic_sim or self.unified_sim):  # Only broadcast if running
                     await self.broadcast_state()
                 last_update = current_time
                 

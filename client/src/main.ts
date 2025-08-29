@@ -146,6 +146,7 @@ class MurmurationGame {
           const legName = data.leg_name || 'Migration Leg A-B';
           console.log('📋 Showing level panel:', { levelNumber, males, females, legName });
           this.uiScene.showLevelPanel(levelNumber, males, females, legName);
+          this.gameScene.hideBirdInspection();
           // Pause the game initially
           this.wsClient.pauseGame();
         } else {
@@ -156,10 +157,12 @@ class MurmurationGame {
         console.log('🏆 Level completed:', data.data);
         // Show completion panel with option to continue to next leg
         this.uiScene.showCompletionPanel(data.data);
+        this.gameScene.hideBirdInspection();
       } else if (data.type === 'level_failed') {
         console.log('💀 Level failed:', data.data);
         // Show failure panel with option to retry
         this.uiScene.showFailurePanel(data.data);
+        this.gameScene.hideBirdInspection();
       } else if (data.type === 'error') {
         console.error('Server error:', data.message);
       }
@@ -204,8 +207,8 @@ class MurmurationGame {
     // Handle continue to next leg events  
     this.uiScene.events.on('continueToNextLeg', () => {
       console.log('🎮 Continue to next migration leg requested');
-      // Set flag to prevent level panel from showing when next leg loads
-      this.levelStartRequested = true;
+      // Don't set the flag here - we want to see the level panel for the next leg
+      // this.levelStartRequested = true;  // REMOVED - we want to see level panel
       // Continue to next migration leg
       this.wsClient.continueMigration();
     });

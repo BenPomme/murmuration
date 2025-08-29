@@ -7,7 +7,7 @@ export class UIScene extends Phaser.Scene {
   private destinationPanel!: Phaser.GameObjects.Container;
   private controlsPanel!: Phaser.GameObjects.Container;
   private geneticsPanel!: Phaser.GameObjects.Container; // NEW: Genetics statistics panel
-  private levelPanel!: Phaser.GameObjects.Container; // NEW: Level start panel
+  private levelPanel?: Phaser.GameObjects.Container; // NEW: Level start panel
   
   // Panel visibility states
   private telemetryVisible = true;
@@ -887,6 +887,13 @@ Other:
   public showLevelPanel(levelNumber: number, maleCount: number, femaleCount: number, legName: string = '') {
     console.log('🎮 UIScene.showLevelPanel called:', { levelNumber, maleCount, femaleCount, legName });
     
+    // If panel was used for completion before, destroy it to reset state
+    if (this.isCompletionPanel && this.levelPanel) {
+      this.levelPanel.destroy();
+      this.levelPanel = undefined;
+      this.isCompletionPanel = false;
+    }
+    
     // Reset completion panel flag
     this.isCompletionPanel = false;
     
@@ -1317,5 +1324,117 @@ Other:
         }
       }
     }
+  }
+
+  public showMigrationResultsPanel(data: any) {
+    console.log('🌟 UIScene.showMigrationResultsPanel called:', data);
+    
+    // Create migration results panel similar to completion panel
+    if (!this.levelPanel) {
+      this.createLevelPanel();
+    }
+    
+    // Mark this as a special results panel
+    this.isCompletionPanel = true;
+    
+    // Update the panel content for migration results
+    const levelTitle = this.levelPanel.getData('levelTitle');
+    if (levelTitle) {
+      levelTitle.setText(`MIGRATION ${data.current_migration - 1} COMPLETE!`);
+      levelTitle.setColor('#44ff88'); // Green for success
+    }
+    
+    // Update subtitle with advancement info
+    const subtitle = this.levelPanel.getData('subtitle');
+    if (subtitle) {
+      subtitle.setText(`${data.survivors} birds survived the journey!\nAdvancing to Migration ${data.current_migration}`);
+    }
+    
+    // Update population counts (survivors for next migration)
+    const maleCount = this.levelPanel.getData('maleCount');
+    const femaleCount = this.levelPanel.getData('femaleCount');
+    if (maleCount && femaleCount) {
+      const males = Math.floor(data.survivors / 2);
+      const females = data.survivors - males;
+      maleCount.setText(`♂ ${males}`);
+      femaleCount.setText(`♀ ${females}`);
+    }
+    
+    // Update button to continue to next migration
+    const startButton = this.levelPanel.getData('startButton');
+    if (startButton) {
+      const buttonText = startButton.getData('buttonText');
+      if (buttonText) {
+        buttonText.setText('START NEXT MIGRATION');
+      }
+    }
+    
+    // Show the panel
+    this.levelPanel.setVisible(true);
+    this.levelPanel.setAlpha(0);
+    
+    // Animate in
+    this.tweens.add({
+      targets: this.levelPanel,
+      alpha: 1,
+      duration: 300,
+      ease: 'Power2'
+    });
+  }
+
+  public showCampaignCompletePanel(data: any) {
+    console.log('🎉 UIScene.showCampaignCompletePanel called:', data);
+    
+    // Create campaign completion panel
+    if (!this.levelPanel) {
+      this.createLevelPanel();
+    }
+    
+    // Mark this as a special completion panel
+    this.isCompletionPanel = true;
+    
+    // Update the panel content for campaign completion
+    const levelTitle = this.levelPanel.getData('levelTitle');
+    if (levelTitle) {
+      levelTitle.setText('CAMPAIGN COMPLETE!');
+      levelTitle.setColor('#ffdd44'); // Gold for ultimate success
+    }
+    
+    // Update subtitle with final achievement
+    const subtitle = this.levelPanel.getData('subtitle');
+    if (subtitle) {
+      subtitle.setText(`All migration routes mastered!\n${data.final_survivors} birds reached final destination\nGeneration ${data.final_generation} achieved!`);
+    }
+    
+    // Update population display
+    const maleCount = this.levelPanel.getData('maleCount');
+    const femaleCount = this.levelPanel.getData('femaleCount');
+    if (maleCount && femaleCount) {
+      const males = Math.floor(data.final_survivors / 2);
+      const females = data.final_survivors - males;
+      maleCount.setText(`♂ ${males}`);
+      femaleCount.setText(`♀ ${females}`);
+    }
+    
+    // Update button for new campaign or main menu
+    const startButton = this.levelPanel.getData('startButton');
+    if (startButton) {
+      const buttonText = startButton.getData('buttonText');
+      if (buttonText) {
+        buttonText.setText('NEW CAMPAIGN');
+      }
+    }
+    
+    // Show the panel
+    this.levelPanel.setVisible(true);
+    this.levelPanel.setAlpha(0);
+    
+    // Animate in with celebration
+    this.tweens.add({
+      targets: this.levelPanel,
+      alpha: 1,
+      duration: 500,
+      ease: 'Power2'
+    });
   }
 }

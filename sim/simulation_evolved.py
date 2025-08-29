@@ -113,7 +113,7 @@ class GameConfig:
     level_hazards: List[Dict] = None
     
     @classmethod
-    def from_level(cls, level_name: str, seed: int = 42, breed: Optional[Breed] = None, migration_number: int = 1):
+    def from_level(cls, level_name: str, seed: int = 42, breed: Optional[Breed] = None, migration_number: int = 1, n_agents: Optional[int] = None):
         """Load config from level JSON with migration-based scaling."""
         levels_file = Path(__file__).parent.parent / "levels" / "levels.json"
         if levels_file.exists():
@@ -131,7 +131,7 @@ class GameConfig:
                     seed=seed,
                     breed=breed or Breed(),
                     migration_number=migration_number,
-                    n_agents=scaled_data.get('n_agents', 100),
+                    n_agents=n_agents if n_agents is not None else scaled_data.get('n_agents', 100),
                     start_zone=tuple(scaled_data.get('start_zone', [200, 600, 100])),
                     destination_zone=tuple(scaled_data.get('destination_zone', [1800, 600, 150])),
                     target_arrivals=scaled_data.get('target_arrivals', 80),
@@ -141,7 +141,7 @@ class GameConfig:
                     level_hazards=scaled_data.get('hazards', [])
                 )
         
-        return cls(level=level_name, seed=seed, breed=breed or Breed(), migration_number=migration_number)
+        return cls(level=level_name, seed=seed, breed=breed or Breed(), migration_number=migration_number, n_agents=n_agents or 100)
     
     @staticmethod
     def _apply_difficulty_scaling(level_data: Dict, migration_number: int) -> Dict:
@@ -291,6 +291,61 @@ class EvolvedSimulation:
                 self.hazards.append(hazard)
             
             logger.info(f"Spawned {len(self.hazards)} evolved hazards")
+    
+    def get_current_state(self) -> Dict[str, Any]:
+        """Get current state without stepping the simulation."""
+        # Calculate alive agents
+        alive_agents = [agent for agent in self.agents if agent.alive]
+        
+        # Calculate survival rate for evolution
+        survival_rate = (self.config.n_agents - self.losses) / self.config.n_agents if self.config.n_agents > 0 else 0
+        
+        # Convert agents to dictionary format for client
+        agents_data = [
+            {
+                'id': agent.id,
+                'x': float(agent.position[0]),
+                'y': float(agent.position[1]),
+                'vx': float(agent.velocity[0]),
+                'vy': float(agent.velocity[1]),
+                'energy': float(agent.energy),
+                'stress': float(agent.stress),
+                'alive': agent.alive
+            }
+            for agent in alive_agents
+        ]
+        
+        return {
+            'tick': self.tick,
+            'agents': agents_data,
+            'population': len(alive_agents),
+            'arrivals': self.arrivals,
+            'losses': self.losses,
+            'beacons': [
+                {
+                    'id': beacon.beacon_id,
+                    'type': beacon.beacon_type.value,
+                    'x': float(beacon.position[0]),
+                    'y': float(beacon.position[1]),
+                    'radius': beacon.spec.radius,
+                    'strength': beacon.get_field_strength(beacon.position, Tick(self.tick)),
+                    'cost': beacon.spec.cost,
+                    'decay': beacon.get_temporal_decay(Tick(self.tick))
+                }
+                for beacon in self.beacon_manager.beacons
+            ],
+            'hazards': self.hazards,
+            'food_havens': self.food_havens,
+            'destination': self.config.destination_zone,
+            'game_over': self.game_over,
+            'victory': self.victory,
+            'time_remaining': max(0, self.config.time_limit_seconds - (time.time() - self.start_time)),
+            'cohesion': self.calculate_cohesion(alive_agents),
+            'breed': self.breed.to_dict(),
+            'survival_rate': survival_rate,
+            'close_calls': self.close_calls,
+            'panic_events': self.panic_events
+        }
     
     def step(self) -> Dict[str, Any]:
         """Execute one simulation step with advanced behaviors."""
@@ -777,7 +832,11 @@ class EvolvedSimulation:
     def evolve_breed(self):
         """Evolve the breed based on this level's performance."""
         if self.game_over:
-            survival_rate = (self.config.n_agents - self.losses) / self.config.n_agents
+            # Avoid division by zero
+            if self.config.n_agents == 0:
+                survival_rate = 0
+            else:
+                survival_rate = (self.config.n_agents - self.losses) / self.config.n_agents
             self.breed.evolve(survival_rate, self.hazards_encountered)
             
             # Update experience
@@ -1100,7 +1159,7 @@ class EvolvedSimulation:
                             if hazard['exhaustion_level'] >= 0.8:  # Give up when exhausted
                                 hazard['target_agent_id'] = None
                                 hazard['chase_duration'] = 0
-                                logger.debug(f"Predator {hazard['id']} gave up chase due to exhaustion")
+                                logger.debug(f"Predator {hazard.get('id', 'unknown')} gave up chase due to exhaustion")
                     else:
                         # Target no longer exists
                         hazard['target_agent_id'] = None

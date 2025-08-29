@@ -1,6 +1,7 @@
 import { Scene } from 'phaser';
 import { audioManager } from './AudioManager';
 import { LAYER_DEPTHS } from './config/gameConfig';
+import { BirdAnimationSystem } from './BirdAnimationSystem';
 
 // Object Pool class for efficient memory management
 class ObjectPool<T extends Phaser.GameObjects.GameObject & { setVisible(visible: boolean): T; setActive(active: boolean): T }> {
@@ -163,6 +164,7 @@ export class GameScene extends Scene {
   private hazardSprites: Map<string, Phaser.GameObjects.Container> = new Map();
   private hazardParticles: Map<string, Phaser.GameObjects.Particles.ParticleEmitter> = new Map();
   private destinationSprite: Phaser.GameObjects.Graphics | null = null;
+  private birdAnimationSystem!: BirdAnimationSystem;
   
   // UI elements
   private infoText!: Phaser.GameObjects.Text;
@@ -226,7 +228,7 @@ export class GameScene extends Scene {
   private zoomSpeed = 0.1;
   
   // Enhanced camera system
-  private cameraMode: 'manual' | 'flock_follow' | 'frame_all' = 'manual';
+  private cameraMode: 'manual' | 'flock_follow' | 'frame_all' = 'flock_follow';
   private flockCentroid = { x: 0, y: 0 };
   private flockVelocity = { x: 0, y: 0 };
   private cameraTargetPos = { x: 0, y: 0 };
@@ -321,6 +323,18 @@ export class GameScene extends Scene {
     
     // Create enhanced background with layers
     this.createBackground();
+    
+    // Initialize bird animation system
+    this.birdAnimationSystem = new BirdAnimationSystem(this);
+    
+    // DEBUG: Add a test bird at center of view to check visibility
+    const testBird = this.add.graphics();
+    testBird.lineStyle(4, 0xFF0000, 1);
+    testBird.fillStyle(0xFFFF00, 1);
+    testBird.fillCircle(1000, 600, 20); // Center of camera view
+    testBird.strokeCircle(1000, 600, 20);
+    testBird.setDepth(100);
+    console.log('🔴 DEBUG: Added yellow test bird at 1000, 600');
     
     // Create enhanced UI elements - DISABLED: Now handled by UIScene
     // this.createInfoPanel();
@@ -708,88 +722,46 @@ export class GameScene extends Scene {
   private updateAgents() {
     if (!this.gameState?.agents) return;
     
-    // Release sprites that no longer have corresponding agents
+    // Safety check - ensure animation system is initialized
+    if (!this.birdAnimationSystem) return;
+    
+    // Remove birds that no longer exist
     const currentAgentIds = new Set(this.gameState.agents.map(a => a.id.toString()));
-    for (const [agentId, sprite] of this.agentSprites.entries()) {
+    for (const agentId of this.agentSprites.keys()) {
       if (!currentAgentIds.has(agentId)) {
-        this.agentPool.release(sprite);
+        this.birdAnimationSystem.removeBird(agentId);
         this.agentSprites.delete(agentId);
       }
     }
     
-    // Update or acquire agent sprites from pool
+    // Update birds using the animation system
     for (const agent of this.gameState.agents) {
       const agentId = agent.id.toString();
-      let sprite = this.agentSprites.get(agentId);
       
-      if (!sprite) {
-        // Acquire sprite from pool or create new one
-        sprite = this.agentPool.acquire(() => this.createLuminousBirdSprite(0, 0));
-        this.agentSprites.set(agentId, sprite);
-      }
+      // Update bird with animation system
+      this.birdAnimationSystem.updateBird({
+        id: agentId,
+        x: agent.x,
+        y: agent.y,
+        vx: agent.vx,
+        vy: agent.vy,
+        energy: agent.energy,
+        stress: agent.stress,
+        alive: agent.alive,
+        gender: agent.gender
+      });
       
-      // Update position
-      sprite.setPosition(agent.x, agent.y);
-      
-      // NEW: Check if bird is feeding at food sites and add visual effects
-      this.updateBirdFeedingEffects(agent, sprite);
-      
-      // Update color based on energy and alive status with genetic modification
-      let targetColor;
-      if (!agent.alive) {
-        targetColor = 0x666666; // Gray for dead
-      } else if (agent.energy < 10) {
-        // NEW: Critical exhaustion zone (flashing red)
-        targetColor = this.time.now % 500 < 250 ? 0xff0000 : 0xff4444;
-      } else if (agent.energy < 30) {
-        targetColor = 0xff4444; // Red for low energy
-      } else if (agent.energy < 60) {
-        targetColor = 0xffaa44; // Orange for medium energy
-      } else {
-        targetColor = 0x44ff44; // Green for high energy
-      }
-      
-      // NEW: Modify color based on gender (subtle tinting)
-      if (agent.alive && agent.gender) {
-        if (agent.gender === 'male') {
-          // Subtle blue tint for males
-          targetColor = this.blendColors(targetColor, 0x0044ff, 0.2);
-        } else {
-          // Subtle pink tint for females
-          targetColor = this.blendColors(targetColor, 0xff0044, 0.2);
-        }
-      }
-      
-      // Update bird sprite color with luminous effect
-      this.updateBirdSpriteColor(sprite, targetColor);
-      
-      // NEW: Update genetic display (gender, generation, leadership)
-      this.updateBirdGeneticDisplay(sprite, agent);
-      
-      // Scale based on energy with animation
-      const targetScale = agent.alive ? Math.max(0.3, agent.energy / 100 * 0.8) : 0.15;
-      
-      // Add subtle stress shaking for high stress birds
-      if (agent.alive && agent.stress > 70) {
-        sprite.x += Math.random() * 2 - 1;
-        sprite.y += Math.random() * 2 - 1;
-      }
-      
-      // Smooth scale transitions with pooled objects
-      if (Math.abs(sprite.scaleX - targetScale) > 0.1) {
-        // Kill existing tweens to prevent conflicts
-        this.tweens.killTweensOf(sprite);
-        this.tweens.add({
-          targets: sprite,
-          scaleX: targetScale,
-          scaleY: targetScale,
-          duration: 300,
-          ease: 'Power2'
-        });
-      } else {
-        sprite.setScale(targetScale);
-      }
+      // Mark as tracked
+      this.agentSprites.set(agentId, true as any);
     }
+    
+    // Update cohesion effects
+    if (this.gameState.cohesion !== undefined) {
+      this.birdAnimationSystem.updateCohesionEffects(this.gameState.cohesion);
+    }
+    
+    // Interpolate positions for smooth movement
+    this.birdAnimationSystem.interpolatePositions(this.game.loop.delta);
   }
 
   private updateBeacons() {
@@ -1574,35 +1546,166 @@ export class GameScene extends Scene {
   }
   
   private createBackground() {
+    // Create day-night gradient overlay
+    const dayNightOverlay = this.add.graphics();
+    dayNightOverlay.fillStyle(0x000033, 0);
+    dayNightOverlay.fillRect(0, 0, this.worldWidth, this.worldHeight);
+    dayNightOverlay.setDepth(-11);
+    
+    // Animate day-night cycle
+    this.tweens.add({
+      targets: dayNightOverlay,
+      alpha: { from: 0, to: 0.3 },
+      duration: 120000, // 2 minutes for full cycle
+      yoyo: true,
+      repeat: -1,
+      onUpdate: (tween) => {
+        const progress = tween.progress;
+        // Shift color from day (blue) to dusk (orange) to night (dark blue)
+        if (progress < 0.5) {
+          dayNightOverlay.clear();
+          dayNightOverlay.fillStyle(0xff6600, progress * 0.2); // Sunset orange
+        } else {
+          dayNightOverlay.clear();
+          dayNightOverlay.fillStyle(0x000033, (progress - 0.5) * 0.6); // Night blue
+        }
+        dayNightOverlay.fillRect(0, 0, this.worldWidth, this.worldHeight);
+      }
+    });
+    
     // Sky gradient background
     if (this.textures.exists('sky_bg')) {
       const sky = this.add.image(this.worldWidth / 2, this.worldHeight / 2, 'sky_bg');
       sky.setDisplaySize(this.worldWidth, this.worldHeight);
       sky.setDepth(-10);
     } else {
-      // Fallback to solid color
-      const bg = this.add.rectangle(this.worldWidth/2, this.worldHeight/2, this.worldWidth, this.worldHeight, 0x87CEEB);
-      bg.setDepth(-10);
+      // Procedural sky with gradient
+      const skyGradient = this.add.graphics();
+      const gradient = skyGradient.createLinearGradient(0, 0, 0, this.worldHeight);
+      gradient.addColorStop(0, '#87CEEB'); // Sky blue at top
+      gradient.addColorStop(0.7, '#98D8E8'); // Lighter blue
+      gradient.addColorStop(1, '#F0E68C'); // Horizon color
+      skyGradient.fillStyle(0x87CEEB);
+      skyGradient.fillRect(0, 0, this.worldWidth, this.worldHeight);
+      skyGradient.setDepth(-10);
     }
     
-    // Add animated cloud layers
-    if (this.textures.exists('clouds')) {
-      for (let i = 0; i < 3; i++) {
-        const cloud = this.add.image(Math.random() * this.worldWidth, Math.random() * this.worldHeight * 0.6, 'clouds');
-        cloud.setScale(0.5 + Math.random() * 0.5);
-        cloud.setAlpha(0.3 + Math.random() * 0.4);
-        cloud.setDepth(-5 + i);
+    // Animated clouds with parallax
+    for (let layer = 0; layer < 3; layer++) {
+      for (let i = 0; i < 5; i++) {
+        const cloudGraphics = this.add.graphics();
+        const cloudX = Math.random() * this.worldWidth;
+        const cloudY = 100 + Math.random() * 300;
+        const cloudScale = 0.5 + layer * 0.3;
         
-        // Animate clouds slowly across the sky
+        // Draw procedural cloud
+        cloudGraphics.fillStyle(0xffffff, 0.3 + layer * 0.1);
+        for (let j = 0; j < 5; j++) {
+          const cx = cloudX + (Math.random() - 0.5) * 100;
+          const cy = cloudY + (Math.random() - 0.5) * 30;
+          const radius = 20 + Math.random() * 30;
+          cloudGraphics.fillCircle(cx, cy, radius * cloudScale);
+        }
+        
+        cloudGraphics.setDepth(-8 + layer);
+        
+        // Animate with different speeds for parallax
         this.tweens.add({
-          targets: cloud,
-          x: cloud.x + this.worldWidth + 200,
-          duration: 60000 + Math.random() * 30000,
+          targets: cloudGraphics,
+          x: this.worldWidth + 200,
+          duration: (60000 + Math.random() * 30000) / (layer + 1),
           repeat: -1,
-          yoyo: false
+          onRepeat: () => {
+            cloudGraphics.x = -200;
+          }
         });
       }
     }
+    
+    // Add animated grass/vegetation
+    const grassContainer = this.add.container(0, 0);
+    grassContainer.setDepth(-3);
+    
+    for (let i = 0; i < 50; i++) {
+      const grassX = Math.random() * this.worldWidth;
+      const grassY = this.worldHeight - 50 - Math.random() * 150;
+      
+      const grass = this.add.graphics();
+      grass.lineStyle(2, 0x228B22, 0.6);
+      
+      // Draw grass blades
+      for (let j = 0; j < 5; j++) {
+        const bladeX = grassX + (Math.random() - 0.5) * 20;
+        grass.moveTo(bladeX, grassY);
+        grass.lineTo(bladeX + Math.random() * 5 - 2.5, grassY - 10 - Math.random() * 20);
+      }
+      grass.strokePath();
+      
+      // Animate swaying
+      this.tweens.add({
+        targets: grass,
+        x: { from: -3, to: 3 },
+        duration: 2000 + Math.random() * 1000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        delay: Math.random() * 2000
+      });
+      
+      grassContainer.add(grass);
+    }
+    
+    // Add animated river/water
+    const riverGraphics = this.add.graphics();
+    riverGraphics.setDepth(-4);
+    
+    // Draw river path
+    const riverPath = new Phaser.Curves.Path(100, 800);
+    riverPath.cubicBezierTo(
+      new Phaser.Math.Vector2(400, 850),
+      new Phaser.Math.Vector2(800, 750),
+      new Phaser.Math.Vector2(1200, 900),
+      new Phaser.Math.Vector2(1600, 850),
+      new Phaser.Math.Vector2(1900, 950)
+    );
+    
+    // Animated water shader effect
+    let waveOffset = 0;
+    this.time.addEvent({
+      delay: 50,
+      callback: () => {
+        waveOffset += 0.1;
+        riverGraphics.clear();
+        
+        // Draw river with animated waves
+        riverGraphics.lineStyle(30, 0x4682B4, 0.6);
+        const points = riverPath.getPoints(100);
+        
+        for (let i = 0; i < points.length - 1; i++) {
+          const wave = Math.sin(waveOffset + i * 0.1) * 5;
+          riverGraphics.beginPath();
+          riverGraphics.moveTo(points[i].x, points[i].y + wave);
+          riverGraphics.lineTo(points[i + 1].x, points[i + 1].y + wave);
+          riverGraphics.strokePath();
+        }
+        
+        // Add sparkles on water
+        riverGraphics.fillStyle(0xffffff, 0.8);
+        for (let i = 0; i < 10; i++) {
+          const sparkleIndex = Math.floor(Math.random() * points.length);
+          const sparkle = points[sparkleIndex];
+          const sparkleSize = Math.sin(waveOffset * 2 + i) * 2 + 2;
+          if (sparkleSize > 2) {
+            riverGraphics.fillCircle(
+              sparkle.x + Math.random() * 20 - 10,
+              sparkle.y + Math.random() * 10 - 5,
+              sparkleSize
+            );
+          }
+        }
+      },
+      loop: true
+    });
   }
   
   private createInfoPanel() {
@@ -2162,31 +2265,59 @@ export class GameScene extends Scene {
       }
       
     } else if (type.toLowerCase().includes('predator')) {
-      // Enhanced predator graphics with motion trails (PERFORMANCE: Removed particles)
-      // Fixed: Predators should be bird-sized, not using the large hazard radius
-      const predatorSize = 8; // Same size as birds
-      graphics.fillStyle(0x990000, 0.8);
-      graphics.fillCircle(0, 0, predatorSize);
-      graphics.lineStyle(2, 0xff0000, 1.0);
-      graphics.strokeCircle(0, 0, predatorSize);
-      
-      // Add predator eyes and teeth (scaled to bird size)
-      graphics.fillStyle(0xff0000, 1.0);
-      graphics.fillCircle(-predatorSize * 0.3, -predatorSize * 0.2, 2);
-      graphics.fillCircle(predatorSize * 0.3, -predatorSize * 0.2, 2);
-      
-      // Add angular lines for teeth/claws (scaled to bird size)
-      graphics.lineStyle(1, 0xffffff, 0.8);
-      for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2;
-        const x1 = Math.cos(angle) * predatorSize * 0.7;
-        const y1 = Math.sin(angle) * predatorSize * 0.7;
-        const x2 = Math.cos(angle) * predatorSize * 0.9;
-        const y2 = Math.sin(angle) * predatorSize * 0.9;
-        graphics.lineBetween(x1, y1, x2, y2);
+      // Use predator sprite if available
+      if (this.textures.exists('predator_sprite')) {
+        // Use actual predator sprite
+        const predatorSprite = this.add.image(0, 0, 'predator_sprite');
+        
+        // Scale predator to be slightly larger than birds but not huge
+        const predatorSize = 16; // Twice bird size for visibility
+        const spriteWidth = predatorSprite.width;
+        const spriteHeight = predatorSprite.height;
+        const spriteDiameter = Math.max(spriteWidth, spriteHeight);
+        const scale = (predatorSize * 2) / spriteDiameter;
+        
+        predatorSprite.setScale(scale);
+        predatorSprite.setTint(0xff4444); // Red tint to indicate danger
+        predatorSprite.setAlpha(0.9);
+        
+        // Add subtle hover animation for circling motion
+        this.tweens.add({
+          targets: predatorSprite,
+          y: predatorSprite.y - 10,
+          duration: 2000,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+        
+        container.add([predatorSprite]);
+      } else {
+        // Fallback: Enhanced predator graphics with motion trails
+        const predatorSize = 8; // Same size as birds
+        graphics.fillStyle(0x990000, 0.8);
+        graphics.fillCircle(0, 0, predatorSize);
+        graphics.lineStyle(2, 0xff0000, 1.0);
+        graphics.strokeCircle(0, 0, predatorSize);
+        
+        // Add predator eyes and teeth (scaled to bird size)
+        graphics.fillStyle(0xff0000, 1.0);
+        graphics.fillCircle(-predatorSize * 0.3, -predatorSize * 0.2, 2);
+        graphics.fillCircle(predatorSize * 0.3, -predatorSize * 0.2, 2);
+        
+        // Add angular lines for teeth/claws (scaled to bird size)
+        graphics.lineStyle(1, 0xffffff, 0.8);
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2;
+          const x1 = Math.cos(angle) * predatorSize * 0.7;
+          const y1 = Math.sin(angle) * predatorSize * 0.7;
+          const x2 = Math.cos(angle) * predatorSize * 0.9;
+          const y2 = Math.sin(angle) * predatorSize * 0.9;
+          graphics.lineBetween(x1, y1, x2, y2);
+        }
+        
+        container.add([graphics]);
       }
-      
-      container.add([graphics]);
       
     } else {
       // Enhanced generic hazard with warning pattern (PERFORMANCE: Removed particles)
@@ -2454,7 +2585,7 @@ export class GameScene extends Scene {
     });
   }
   
-  private hideBirdInspection() {
+  public hideBirdInspection() {
     if (this.birdInspectionPanel) {
       this.birdInspectionPanel.destroy();
       this.birdInspectionPanel = undefined;
