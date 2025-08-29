@@ -15,7 +15,7 @@ export class UIScene extends Phaser.Scene {
   private controlsVisible = false;
   private geneticsVisible = true; // NEW: Genetics panel visibility
   private isCompletionPanel = false; // Track if level panel is showing completion
-  // Planning phase tracking removed - handled by GameScene
+  private isPlanningPhase = false; // Track if planning phase is active
   
   // Current game state references
   private gameData: any = {};
@@ -1015,6 +1015,7 @@ Other:
 
   public showPlanningPanel() {
     console.log('📝 Showing planning panel');
+    if (this.isPlanningPhase) return; // Avoid reopening if already active
     this.isPlanningPhase = true;
 
     if (this.planningPanel) {
@@ -1029,6 +1030,7 @@ Other:
 
   public hidePlanningPanel() {
     console.log('🚀 Hiding planning panel');
+    if (!this.isPlanningPhase) return; // Avoid redundant calls
     this.isPlanningPhase = false;
 
     if (this.planningPanel) {
@@ -1151,12 +1153,10 @@ Other:
         }
       }
     }
+    }
   }
 
-  
-  
-    
-// Orphaned code removed - migration results handled elsewhere
+  // Orphaned code removed - migration results handled elsewhere
 
   public showCampaignCompletePanel(data: any) {
     console.log('🎉 UIScene.showCampaignCompletePanel called:', data);
