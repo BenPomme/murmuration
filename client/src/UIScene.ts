@@ -1012,7 +1012,25 @@ Other:
 
   // Path planning methods
   private startMigration() {
-    console.log('🚀 Starting migration from planning panel');
+    // Check if a path has been drawn
+    const gameScene = this.scene.get('GameScene') as any;
+    if (!gameScene || !gameScene.getDrawnPath || gameScene.getDrawnPath().length === 0) {
+      console.log('⚠️ Cannot start migration without a path');
+      // Show toast message
+      const toast = this.add.text(this.scale.width / 2, this.scale.height / 2, 
+        'Please draw a migration path first!', {
+        fontSize: '20px',
+        color: '#ff0000',
+        backgroundColor: '#000000',
+        padding: { x: 20, y: 10 }
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(1000);
+      
+      // Remove toast after 2 seconds
+      this.time.delayedCall(2000, () => toast.destroy());
+      return;
+    }
+    
+    console.log('🚀 Starting migration with valid path');
     this.events.emit('startMigration');
     this.hidePlanningPanel();
   }

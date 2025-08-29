@@ -1040,6 +1040,12 @@ export class GameScene extends Scene {
     // Initialize path drawing
     this.isDrawing = true;
     this.drawnPath = [new Phaser.Math.Vector2(worldX, worldY)];
+    
+    // Hide planning panel when drawing starts
+    const uiScene = this.scene.get('UIScene') as any;
+    if (uiScene && uiScene.hidePlanningPanel) {
+      uiScene.hidePlanningPanel();
+    }
 
     // Create path graphics if not exists
     if (!this.pathGraphics) {
