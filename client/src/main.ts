@@ -33,6 +33,9 @@ class MurmurationGame {
       height: 720,
       parent: 'game-container',
       backgroundColor: '#87CEEB',
+      resolution: window.devicePixelRatio, // Hi-DPI support
+      pixelArt: false, // Smooth rendering
+      roundPixels: false, // Smooth movement
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,

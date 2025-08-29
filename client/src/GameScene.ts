@@ -248,7 +248,7 @@ export class GameScene extends Scene {
   private flockCentroid = { x: 0, y: 0 };
   private flockVelocity = { x: 0, y: 0 };
   private cameraTargetPos = { x: 0, y: 0 };
-  private cameraFollowSmoothness = 0.05;
+  private cameraFollowSmoothness = 0.12; // Increased for smoother following
   
   // World bounds (matching Python simulation)
   private worldWidth = 2000;
@@ -527,7 +527,7 @@ export class GameScene extends Scene {
     const camera = this.cameras.main;
     
     // Predict where the flock will be (looking ahead based on velocity)
-    const predictionTime = 2.0; // seconds
+    const predictionTime = 1.0; // Reduced from 2.0 for less lag
     this.cameraTargetPos.x = this.flockCentroid.x + (this.flockVelocity.x * predictionTime);
     this.cameraTargetPos.y = this.flockCentroid.y + (this.flockVelocity.y * predictionTime);
     
@@ -1226,6 +1226,9 @@ export class GameScene extends Scene {
   public endPlanningPhase() {
     console.log('🚀 Ending planning phase, starting migration');
     this.isPlanningPhase = false;
+    
+    // Frame all birds before starting
+    this.frameAllBirds();
 
     // Resume the game
     this.events.emit('togglePause');
