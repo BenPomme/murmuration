@@ -117,6 +117,8 @@ export class UIScene extends Phaser.Scene {
     bg.lineStyle(1, 0x44aaff, 0.8);
     bg.fillRoundedRect(0, 0, panelWidth, panelHeight, 8);
     bg.strokeRoundedRect(0, 0, panelWidth, panelHeight, 8);
+    // Make background interactive to catch clicks
+    bg.setInteractive(new Phaser.Geom.Rectangle(0, 0, panelWidth, panelHeight), Phaser.Geom.Rectangle.Contains);
     panel.add(bg);
     
     // Header with collapse button
@@ -494,6 +496,8 @@ export class UIScene extends Phaser.Scene {
     bg.lineStyle(1, 0x44aaff, 0.8);
     bg.fillRoundedRect(0, 0, panelWidth, panelHeight, 8);
     bg.strokeRoundedRect(0, 0, panelWidth, panelHeight, 8);
+    // Make background interactive to catch clicks
+    bg.setInteractive(new Phaser.Geom.Rectangle(0, 0, panelWidth, panelHeight), Phaser.Geom.Rectangle.Contains);
     panel.add(bg);
     
     // Header
@@ -573,34 +577,35 @@ Other:
   private handleResize = () => {
     const { width, height } = this.scale.gameSize;
     
-    // COMPLETELY NEW LAYOUT: All panels positioned at screen edges, not covering gameplay
+    // Pin panels to edges with proper z-order
     
-    // Top bar: Destination info (thin strip across top)
+    // Top bar: Destination info
     this.destinationPanel.setPosition(width / 2, 5);
+    this.destinationPanel.setDepth(200);
     
-    // Bottom bar: Beacon controls (thin strip across bottom)
-    // Beacon panel removed - using path drawing system
     // Planning panel (center screen during planning phase)
     if (this.planningPanel) {
       this.planningPanel.setPosition(width / 2, height / 2);
+      this.planningPanel.setDepth(300);
     }
 
-    // Left sidebar: Telemetry (narrow, full height)
+    // Left edge: Telemetry panel
     if (this.telemetryPanel) {
-      this.telemetryPanel.setPosition(5, 50);
-      this.telemetryPanel.setAlpha(0.95);
+      this.telemetryPanel.setPosition(0, 50);
+      this.telemetryPanel.setDepth(200);
     }
     
-    // Right sidebar: Genetics (narrow, offset from top)  
+    // Right edge: Genetics panel  
     if (this.geneticsPanel) {
-      this.geneticsPanel.setPosition(width - 285, 50);
-      this.geneticsPanel.setAlpha(0.95);
+      const panelWidth = 280;
+      this.geneticsPanel.setPosition(width - panelWidth, 50);
+      this.geneticsPanel.setDepth(200);
     }
     
     // Controls panel: Top-right corner when visible
     if (this.controlsPanel) {
       this.controlsPanel.setPosition(width - 255, 80);
-      this.controlsPanel.setAlpha(0.98);
+      this.controlsPanel.setDepth(210);
     }
   };
 
