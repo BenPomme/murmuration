@@ -162,7 +162,7 @@ export class MenuScene extends Phaser.Scene {
       fontSize: '14px',
       fontFamily: 'Arial, sans-serif',
       color: Phaser.Display.Color.ValueToColor(this.colors.white).rgba,
-      alpha: 0.7
+      // alpha: 0.7 // Not supported in Phaser text style
     }).setOrigin(1, 1);
     
     // Add instructions
@@ -266,6 +266,6 @@ export class MenuScene extends Phaser.Scene {
       this.backgroundMusic.stop();
       this.backgroundMusic.destroy();
     }
-    super.destroy();
+    // Scene cleanup is handled automatically by Phaser
   }
 }

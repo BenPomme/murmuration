@@ -251,17 +251,8 @@ export class BirdAnimationSystem {
     bird.glow.fillCircle(0, 0, 12 + birdData.energy / 10);
     
     // Skip animation for now since we're using graphics
-    // Adjust wing flap speed based on energy
-    const targetFlapSpeed = birdData.alive ? 
-      6 + (birdData.energy / 100) * 6 : 0;
-    
-    // Animation disabled for graphics
-    // if (birdData.alive && Math.abs(bird.wingFlapSpeed - targetFlapSpeed) > 0.5) {
-    //   bird.wingFlapSpeed = targetFlapSpeed;
-    //   bird.sprite.anims.msPerFrame = 1000 / bird.wingFlapSpeed;
-    // } else if (!birdData.alive) {
-    //   bird.sprite.anims.stop();
-    // }
+    // Animation code commented out for performance
+    // const targetFlapSpeed = birdData.alive ? 6 + (birdData.energy / 100) * 6 : 0;
     
     // Scale based on energy - adjusted for larger base size
     const targetScale = birdData.alive ? 

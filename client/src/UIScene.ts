@@ -2,25 +2,26 @@ import Phaser from 'phaser';
 
 export class UIScene extends Phaser.Scene {
   private hudContainer!: Phaser.GameObjects.Container;
-  private beaconPanel!: Phaser.GameObjects.Container;
+  // Beacon system removed - replaced with path drawing
   private telemetryPanel!: Phaser.GameObjects.Container;
   private destinationPanel!: Phaser.GameObjects.Container;
   private controlsPanel!: Phaser.GameObjects.Container;
   private geneticsPanel!: Phaser.GameObjects.Container; // NEW: Genetics statistics panel
   private levelPanel?: Phaser.GameObjects.Container; // NEW: Level start panel
+  private planningPanel?: Phaser.GameObjects.Container; // NEW: Path planning panel
   
   // Panel visibility states
   private telemetryVisible = true;
   private controlsVisible = false;
   private geneticsVisible = true; // NEW: Genetics panel visibility
   private isCompletionPanel = false; // Track if level panel is showing completion
+  // Planning phase tracking removed - handled by GameScene
   
   // Current game state references
   private gameData: any = {};
   
   // UI Elements
-  private beaconButtons: Map<string, Phaser.GameObjects.Container> = new Map();
-  private selectedBeaconType: string | null = null;
+  // Beacon system completely removed - using path drawing instead
   
   constructor() {
     super({ key: 'UIScene' });
@@ -38,12 +39,27 @@ export class UIScene extends Phaser.Scene {
     this.createDestinationPanel();
     this.createTelemetryPanel();
     this.createGeneticsPanel(); // NEW: Add genetics panel
-    this.createBeaconPanel();
+    // Beacon panel removed - using path drawing system instead
+    this.createPlanningPanel(); // NEW: Path planning panel
     this.createControlsPanel();
     this.createLevelPanel(); // NEW: Level start panel
     
     // Setup input handlers
     this.setupInputHandlers();
+
+    // Event listeners for planning phase coordination
+    this.events.on('startMigration', () => {
+      // Notify GameScene to end planning phase
+      this.scene.get('GameScene')?.events.emit('endPlanningPhase');
+    });
+
+    this.events.on('showPlanningPhase', () => {
+      this.showPlanningPanel();
+    });
+
+    this.events.on('hidePlanningPhase', () => {
+      this.hidePlanningPanel();
+    });
     
     // Initial resize to position elements
     this.handleResize();
@@ -282,7 +298,7 @@ export class UIScene extends Phaser.Scene {
       'Hazard Awareness',
       'Energy Efficiency', 
       'Flock Cohesion',
-      'Beacon Sensitivity',
+      // Beacon sensitivity removed - using path-based system
       'Stress Resilience',
       'Leadership'
     ];
@@ -291,7 +307,7 @@ export class UIScene extends Phaser.Scene {
       'avg_hazard_awareness',
       'avg_energy_efficiency',
       'avg_flock_cohesion',
-      'avg_beacon_sensitivity',
+      // avg_beacon_sensitivity removed - using path-based system
       'avg_stress_resilience',
       'avg_leadership'
     ];
@@ -300,7 +316,8 @@ export class UIScene extends Phaser.Scene {
       const yPos = 115 + i * 20;
       
       // Trait name
-      const traitLabel = this.createCrispText(15, yPos, traitNames[i], {
+      const traitName = traitNames[i] || `Trait ${i}`;
+      const traitLabel = this.createCrispText(15, yPos, traitName, {
         fontSize: '10px',
         color: '#cccccc'
       });
@@ -364,169 +381,99 @@ export class UIScene extends Phaser.Scene {
     return colors[index] || 0xffffff;
   }
 
-  private createBeaconPanel() {
-    // REDESIGNED: Compact bottom bar for beacon controls
-    const panelWidth = 320;
-    const panelHeight = 50;
-    
+  // Beacon system completely removed - replaced with path drawing system
+
+  private createPlanningPanel() {
+    const panelWidth = 400;
+    const panelHeight = 200;
+
     const panel = this.add.container(0, 0); // Will be positioned in handleResize
-    
-    // Background - more translucent for elegance
+    panel.setVisible(false); // Initially hidden
+
+    // Background
     const bg = this.add.graphics();
-    bg.fillStyle(0x001133, 0.75);
-    bg.lineStyle(1, 0x44aaff, 0.8);
-    bg.fillRoundedRect(-panelWidth/2, -panelHeight, panelWidth, panelHeight, 8);
-    bg.strokeRoundedRect(-panelWidth/2, -panelHeight, panelWidth, panelHeight, 8);
+    bg.fillStyle(0x002244, 0.9);
+    bg.lineStyle(2, 0x44aaff, 0.8);
+    bg.fillRoundedRect(-panelWidth/2, -panelHeight/2, panelWidth, panelHeight, 12);
+    bg.strokeRoundedRect(-panelWidth/2, -panelHeight/2, panelWidth, panelHeight, 12);
     panel.add(bg);
-    
-    // Beacon budget counter (top-right corner)
-    const budgetLabel = this.createCrispText(panelWidth/2 - 15, -panelHeight + 8, 'BEACONS', {
-      fontSize: '10px',
+
+    // Title
+    const title = this.createCrispText(0, -panelHeight/2 + 25, 'PLAN YOUR MIGRATION ROUTE', {
+      fontSize: '16px',
       color: '#44aaff',
       fontStyle: 'bold'
     });
-    budgetLabel.setOrigin(1, 0);
-    panel.add(budgetLabel);
-    
-    const budgetCounter = this.createCrispText(panelWidth/2 - 15, -panelHeight + 20, '3/5', {
-      fontSize: '16px',
-      color: '#ffff88',
-      fontStyle: 'bold'
-    });
-    budgetCounter.setOrigin(1, 0);
-    panel.add(budgetCounter);
-    panel.setData('budgetCounter', budgetCounter);
-    
-    // Wind beacon buttons - push birds up or down
-    const beacons = [
-      { type: 'wind_up', icon: '⬆️', color: 0x88ffff, label: 'WIND UP' },  
-      { type: 'wind_down', icon: '⬇️', color: 0xffff88, label: 'WIND DOWN' }
-    ];
-    
-    // Compact beacon buttons for bottom bar
-    const buttonWidth = 80;
-    const buttonSpacing = 90;
-    const startX = -(beacons.length - 1) * buttonSpacing / 2;
-    
-    beacons.forEach((beacon, index) => {
-      const x = startX + index * buttonSpacing;
-      const button = this.createBeaconButton(beacon, x, -25, buttonWidth);
-      panel.add(button);
-      this.beaconButtons.set(beacon.type, button);
-    });
-    
-    // Clear selection button - positioned for compact bottom bar
-    const clearBtn = this.createClearButton(panelWidth/2 - 25, -25);
-    panel.add(clearBtn);
-    
-    this.beaconPanel = panel;
-    this.hudContainer.add(panel);
-  }
+    title.setOrigin(0.5, 0.5);
+    panel.add(title);
 
-  private createBeaconButton(beacon: any, x: number, y: number, width: number): Phaser.GameObjects.Container {
-    const button = this.add.container(x, y);
-    
-    // REDESIGNED: Compact button for bottom bar
-    const buttonHeight = 40;
-    const bg = this.add.graphics();
-    bg.fillStyle(beacon.color, 0.4);
-    bg.lineStyle(2, beacon.color, 0.7);
-    bg.fillRoundedRect(-width/2, -buttonHeight/2, width, buttonHeight, 6);
-    bg.strokeRoundedRect(-width/2, -buttonHeight/2, width, buttonHeight, 6);
-    button.add(bg);
-    button.setData('bg', bg);
-    
-    // Icon (compact)
-    const icon = this.createCrispText(0, -8, beacon.icon, {
-      fontSize: '18px'
+    // Instructions
+    const instructions = [
+      '• Click and drag to draw your migration path',
+      '• Path must start near your flock',
+      '• Path must end at the destination',
+      '• Right-click to clear and redraw',
+      '• Longer paths consume more energy'
+    ];
+
+    instructions.forEach((instruction, index) => {
+      const yPos = -panelHeight/2 + 50 + index * 18;
+      const text = this.createCrispText(-panelWidth/2 + 20, yPos, instruction, {
+        fontSize: '12px',
+        color: '#ffffff'
+      });
+      panel.add(text);
     });
-    icon.setOrigin(0.5, 0.5);
-    button.add(icon);
-    
-    // Smaller label
-    const label = this.createCrispText(0, 8, beacon.label, {
-      fontSize: '8px',
+
+    // Start Migration Button
+    const buttonWidth = 150;
+    const buttonHeight = 40;
+    const buttonBg = this.add.graphics();
+    buttonBg.fillStyle(0x00aa44, 0.8);
+    buttonBg.lineStyle(2, 0x44ff88, 0.9);
+    buttonBg.fillRoundedRect(-buttonWidth/2, panelHeight/2 - buttonHeight - 15, buttonWidth, buttonHeight, 8);
+    buttonBg.strokeRoundedRect(-buttonWidth/2, panelHeight/2 - buttonHeight - 15, buttonWidth, buttonHeight, 8);
+    panel.add(buttonBg);
+
+    const buttonText = this.createCrispText(0, panelHeight/2 - buttonHeight/2 - 15, 'START MIGRATION', {
+      fontSize: '14px',
       color: '#ffffff',
       fontStyle: 'bold'
     });
-    label.setOrigin(0.5, 0.5);
-    button.add(label);
-    
-    // Usage counter (will be updated based on game state)
-    const counter = this.createCrispText(width/2 - 8, -20, 'x3', {
-      fontSize: '10px',
-      color: '#ffff00',
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      padding: { x: 4, y: 2 }
-    });
-    counter.setOrigin(1, 0);
-    button.add(counter);
-    button.setData('counter', counter);
-    
-    // REDESIGNED: Proper interaction area for compact buttons
-    button.setSize(width, buttonHeight);
-    button.setInteractive({ useHandCursor: true });
-    button.on('pointerover', () => {
-      bg.clear();
-      bg.fillStyle(beacon.color, 0.6);
-      bg.lineStyle(2, beacon.color, 0.9);
-      bg.fillRoundedRect(-width/2, -buttonHeight/2, width, buttonHeight, 6);
-      bg.strokeRoundedRect(-width/2, -buttonHeight/2, width, buttonHeight, 6);
-    });
-    button.on('pointerout', () => {
-      if (this.selectedBeaconType !== beacon.type) {
-        bg.clear();
-        bg.fillStyle(beacon.color, 0.4);
-        bg.lineStyle(2, beacon.color, 0.7);
-        bg.fillRoundedRect(-width/2, -buttonHeight/2, width, buttonHeight, 6);
-        bg.strokeRoundedRect(-width/2, -buttonHeight/2, width, buttonHeight, 6);
-      }
-    });
-    button.on('pointerdown', () => {
-      this.selectBeaconType(beacon.type);
-    });
-    
-    return button;
-  }
+    buttonText.setOrigin(0.5, 0.5);
+    panel.add(buttonText);
 
-  private createClearButton(x: number, y: number): Phaser.GameObjects.Container {
-    const button = this.add.container(x, y);
-    
-    const bg = this.add.graphics();
-    bg.fillStyle(0x666666, 0.8);
-    bg.lineStyle(2, 0x999999, 0.8);
-    bg.fillRoundedRect(-20, -15, 40, 30, 4);
-    bg.strokeRoundedRect(-20, -15, 40, 30, 4);
-    button.add(bg);
-    
-    const icon = this.createCrispText(0, 0, '✕', {
-      fontSize: '16px',
-      color: '#ffffff'
+    // Make button interactive
+    const buttonContainer = this.add.container(0, panelHeight/2 - buttonHeight/2 - 15);
+    buttonContainer.setSize(buttonWidth, buttonHeight);
+    buttonContainer.setInteractive({ useHandCursor: true });
+
+    buttonContainer.on('pointerover', () => {
+      buttonBg.clear();
+      buttonBg.fillStyle(0x00cc55, 0.9);
+      buttonBg.lineStyle(2, 0x66ff99, 1.0);
+      buttonBg.fillRoundedRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 8);
+      buttonBg.strokeRoundedRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 8);
     });
-    icon.setOrigin(0.5, 0.5);
-    button.add(icon);
-    
-    button.setSize(40, 30);
-    button.setInteractive({ useHandCursor: true });
-    button.on('pointerover', () => {
-      bg.clear();
-      bg.fillStyle(0x888888, 0.9);
-      bg.lineStyle(2, 0xbbbbbb, 0.9);
-      bg.fillRoundedRect(-20, -15, 40, 30, 4);
-      bg.strokeRoundedRect(-20, -15, 40, 30, 4);
+
+    buttonContainer.on('pointerout', () => {
+      buttonBg.clear();
+      buttonBg.fillStyle(0x00aa44, 0.8);
+      buttonBg.lineStyle(2, 0x44ff88, 0.9);
+      buttonBg.fillRoundedRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 8);
+      buttonBg.strokeRoundedRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 8);
     });
-    button.on('pointerout', () => {
-      bg.clear();
-      bg.fillStyle(0x666666, 0.8);
-      bg.lineStyle(2, 0x999999, 0.8);
-      bg.fillRoundedRect(-20, -15, 40, 30, 4);
-      bg.strokeRoundedRect(-20, -15, 40, 30, 4);
+
+    buttonContainer.on('pointerdown', () => {
+      this.startMigration();
     });
-    button.on('pointerdown', () => {
-      this.clearBeaconSelection();
-    });
-    
-    return button;
+
+    panel.add(buttonContainer);
+    buttonContainer.setData('bg', buttonBg);
+    buttonContainer.setData('text', buttonText);
+
+    this.planningPanel = panel;
+    this.hudContainer.add(panel);
   }
 
   private createControlsPanel() {
@@ -570,12 +517,11 @@ Camera:
 • V - Follow flock
 • C - Frame all
 
-Wind Beacons:
-• Wind Up: Pushes birds upward
-• Wind Down: Pushes birds downward
-• Click beacon type to select
-• Click world to place
-• Right-click to cancel
+Path Drawing (Coming Soon):
+• Click and drag to draw migration route
+• Route must start near flock and end at destination
+• Right-click to clear path
+• Path length affects energy consumption
 
 Other:
 • SPACE - Pause/Resume
@@ -616,7 +562,7 @@ Other:
     });
     
     keys.ESC.on('down', () => {
-      this.clearBeaconSelection();
+      // Beacon selection clearing removed - using path drawing
     });
   }
 
@@ -629,8 +575,12 @@ Other:
     this.destinationPanel.setPosition(width / 2, 5);
     
     // Bottom bar: Beacon controls (thin strip across bottom)
-    this.beaconPanel.setPosition(width / 2, height - 25);
-    
+    // Beacon panel removed - using path drawing system
+    // Planning panel (center screen during planning phase)
+    if (this.planningPanel) {
+      this.planningPanel.setPosition(width / 2, height / 2);
+    }
+
     // Left sidebar: Telemetry (narrow, full height)
     if (this.telemetryPanel) {
       this.telemetryPanel.setPosition(5, 50);
@@ -650,56 +600,7 @@ Other:
     }
   };
 
-  private selectBeaconType(type: string) {
-    // Clear previous selection
-    this.beaconButtons.forEach((button, buttonType) => {
-      if (buttonType !== type) {
-        const bg = button.getData('bg');
-        const color = this.getBeaconColor(buttonType);
-        bg.clear();
-        bg.fillStyle(color, 0.3);
-        bg.lineStyle(2, color, 0.6);
-        bg.fillRoundedRect(-50, -25, 100, 50, 8);
-        bg.strokeRoundedRect(-50, -25, 100, 50, 8);
-      }
-    });
-    
-    // Highlight selected button
-    const selectedButton = this.beaconButtons.get(type);
-    if (selectedButton) {
-      const bg = selectedButton.getData('bg');
-      const color = this.getBeaconColor(type);
-      bg.clear();
-      bg.fillStyle(color, 0.7);
-      bg.lineStyle(3, color, 1.0);
-      bg.fillRoundedRect(-50, -25, 100, 50, 8);
-      bg.strokeRoundedRect(-50, -25, 100, 50, 8);
-    }
-    
-    this.selectedBeaconType = type;
-    
-    // Change cursor and emit selection event
-    this.input.setDefaultCursor('crosshair');
-    this.events.emit('beaconSelected', { type });
-  }
-
-  private clearBeaconSelection() {
-    this.selectedBeaconType = null;
-    this.input.setDefaultCursor('default');
-    
-    // Reset all button styles
-    this.beaconButtons.forEach((button, type) => {
-      const bg = button.getData('bg');
-      const color = this.getBeaconColor(type);
-      bg.clear();
-      bg.fillStyle(color, 0.3);
-      bg.lineStyle(2, color, 0.6);
-      bg.fillRoundedRect(-50, -25, 100, 50, 8);
-      bg.strokeRoundedRect(-50, -25, 100, 50, 8);
-    });
-    
-    this.events.emit('beaconCleared');
-  }
+  // Beacon selection methods removed - using path drawing system
 
   private toggleTelemetryPanel() {
     this.telemetryVisible = !this.telemetryVisible;
@@ -734,7 +635,7 @@ Other:
     
     // Ensure we destroy any existing panel first to prevent overlays
     if (this.levelPanel) {
-      this.levelPanel.destroy();
+      this.levelPanel?.destroy();
       this.levelPanel = null as any;
     }
     
@@ -866,7 +767,7 @@ Other:
     panel.add(startButton);
     
     this.levelPanel = panel;
-    this.levelPanel.setVisible(false); // Hidden by default
+    this.levelPanel?.setVisible(false); // Hidden by default
     
     // Ensure hudContainer exists before adding
     if (this.hudContainer) {
@@ -880,7 +781,7 @@ Other:
 
   private hideLevelPanel() {
     if (this.levelPanel) {
-      this.levelPanel.setVisible(false);
+      this.levelPanel?.setVisible(false);
     }
   }
 
@@ -889,57 +790,53 @@ Other:
     
     // If panel was used for completion before, destroy it to reset state
     if (this.isCompletionPanel && this.levelPanel) {
-      this.levelPanel.destroy();
-      this.levelPanel = undefined;
+      this.levelPanel?.destroy();
+      this.levelPanel = null as any;
       this.isCompletionPanel = false;
     }
-    
+
+    // Create new level panel if it doesn't exist
+    if (!this.levelPanel) {
+      this.createLevelPanel();
+    }
+
     // Reset completion panel flag
     this.isCompletionPanel = false;
-    
+
+    // Ensure panel exists before proceeding
     if (!this.levelPanel) {
-      console.log('⚠️ Level panel not initialized yet, creating it now...');
-      this.createLevelPanel();
-      if (!this.levelPanel) {
-        console.error('❌ Failed to create level panel!');
-        return;
-      }
+      console.error('Failed to create level panel');
+      return;
     }
     
     // Update level title
-    const levelTitle = this.levelPanel.getData('levelTitle');
+    const levelTitle = this.levelPanel?.getData('levelTitle');
     if (levelTitle) {
       levelTitle.setText(`MIGRATION LEG ${levelNumber}`);
     }
     
     // Update subtitle
-    const subtitle = this.levelPanel.getData('subtitle');
+    const subtitle = this.levelPanel?.getData('subtitle');
     if (subtitle && legName) {
       subtitle.setText(legName);
     }
     
     // Update male count
-    const maleCountText = this.levelPanel.getData('maleCount');
+    const maleCountText = this.levelPanel?.getData('maleCount');
     if (maleCountText) {
       maleCountText.setText(`${maleCount} Males`);
     }
     
     // Update female count
-    const femaleCountText = this.levelPanel.getData('femaleCount');
+    const femaleCountText = this.levelPanel?.getData('femaleCount');
     if (femaleCountText) {
       femaleCountText.setText(`${femaleCount} Females`);
     }
     
-    this.levelPanel.setVisible(true);
+    this.levelPanel?.setVisible(true);
   }
 
-  private getBeaconColor(type: string): number {
-    const colors = {
-      'wind_up': 0x88ffff,
-      'wind_down': 0xffff88
-    };
-    return colors[type as keyof typeof colors] || 0xffffff;
-  }
+  // getBeaconColor method removed - beacon system replaced
 
   // Public methods for updating UI from game state
   public updateGameData(data: any) {
@@ -970,10 +867,7 @@ Other:
       this.updateGeneticsData(data);
     }
     
-    // Update beacon counters
-    if (data.beacon_budget !== undefined) {
-      this.updateBeaconCounters(data.beacon_budget);
-    }
+    // Beacon budget removed - using path-based system
   }
 
   private updateTelemetryData(data: any) {
@@ -1067,7 +961,7 @@ Other:
       'avg_hazard_awareness',
       'avg_energy_efficiency',
       'avg_flock_cohesion',
-      'avg_beacon_sensitivity',
+      // avg_beacon_sensitivity removed - using path-based system
       'avg_stress_resilience',
       'avg_leadership'
     ];
@@ -1108,84 +1002,43 @@ Other:
     }
   }
 
-  private updateBeaconCounters(budget: number) {
-    // Update the main budget counter
-    const budgetCounter = this.beaconPanel?.getData('budgetCounter');
-    if (budgetCounter) {
-      const beaconsUsed = (this.gameData.beacons?.length || 0);
-      const totalBudget = budget + beaconsUsed; // Total budget = remaining + used
-      budgetCounter.setText(`${budget}/${totalBudget}`);
-      
-      // Change color based on remaining budget
-      if (budget === 0) {
-        budgetCounter.setColor('#ff4444'); // Red when no beacons left
-      } else if (budget <= 1) {
-        budgetCounter.setColor('#ffaa44'); // Orange when running low
-      } else {
-        budgetCounter.setColor('#ffff88'); // Yellow when plenty left
-      }
+  // Beacon counter methods removed - using path drawing system
+
+  // Beacon-related methods removed - using path drawing system
+
+  // Path planning methods
+  private startMigration() {
+    console.log('🚀 Starting migration from planning panel');
+    this.events.emit('startMigration');
+    this.hidePlanningPanel();
+  }
+
+  public showPlanningPanel() {
+    console.log('📝 Showing planning panel');
+    this.isPlanningPhase = true;
+
+    if (this.planningPanel) {
+      this.planningPanel.setVisible(true);
     }
-    
-    // Update individual beacon button counters (keeping individual counters for now)
-    this.beaconButtons.forEach((button) => {
-      const counter = button.getData('counter');
-      if (counter) {
-        counter.setText(`x${budget}`);
-        counter.setVisible(budget > 0);
-      }
-    });
-    
-    // Disable beacon buttons when budget is exhausted
-    this.beaconButtons.forEach((button, type) => {
-      const isDisabled = budget <= 0;
-      if (isDisabled) {
-        button.setAlpha(0.5);
-        button.removeInteractive();
-      } else {
-        button.setAlpha(1.0);
-        if (!button.input) {
-          // Re-enable interaction
-          button.setInteractive({ useHandCursor: true });
-          this.setupBeaconButtonEvents(button, type);
-        }
-      }
-    });
-  }
-  
-  private setupBeaconButtonEvents(button: Phaser.GameObjects.Container, beaconType: string) {
-    const bg = button.getData('bg');
-    const color = this.getBeaconColor(beaconType);
-    
-    button.on('pointerover', () => {
-      bg.clear();
-      bg.fillStyle(color, 0.5);
-      bg.lineStyle(2, color, 0.8);
-      bg.fillRoundedRect(-50, -25, 100, 50, 8);
-      bg.strokeRoundedRect(-50, -25, 100, 50, 8);
-    });
-    
-    button.on('pointerout', () => {
-      if (this.selectedBeaconType !== beaconType) {
-        bg.clear();
-        bg.fillStyle(color, 0.3);
-        bg.lineStyle(2, color, 0.6);
-        bg.fillRoundedRect(-50, -25, 100, 50, 8);
-        bg.strokeRoundedRect(-50, -25, 100, 50, 8);
-      }
-    });
-    
-    button.on('pointerdown', () => {
-      this.selectBeaconType(beaconType);
-    });
+
+    // Hide other panels during planning
+    if (this.telemetryPanel) this.telemetryPanel.setVisible(false);
+    if (this.geneticsPanel) this.geneticsPanel.setVisible(false);
+    if (this.controlsPanel) this.controlsPanel.setVisible(false);
   }
 
-  // Getters for integration with GameScene
-  public getSelectedBeaconType(): string | null {
-    return this.selectedBeaconType;
-  }
+  public hidePlanningPanel() {
+    console.log('🚀 Hiding planning panel');
+    this.isPlanningPhase = false;
 
-  public clearSelection() {
-    this.clearBeaconSelection();
+    if (this.planningPanel) {
+      this.planningPanel.setVisible(false);
+    }
+
+    // Restore other panels
+    if (this.telemetryPanel) this.telemetryPanel.setVisible(this.telemetryVisible);
+    if (this.geneticsPanel) this.geneticsPanel.setVisible(this.geneticsVisible);
+    if (this.controlsPanel) this.controlsPanel.setVisible(this.controlsVisible);
   }
 
   public showCompletionPanel(completionData: any) {
@@ -1200,22 +1053,22 @@ Other:
     }
     
     // Update the panel content for completion
-    const levelTitle = this.levelPanel.getData('levelTitle');
+    const levelTitle = this.levelPanel?.getData('levelTitle');
     if (levelTitle) {
       levelTitle.setText('MIGRATION LEG COMPLETE!');
       levelTitle.setColor('#44ff44'); // Green for success
     }
     
     // Update subtitle with results
-    const subtitle = this.levelPanel.getData('subtitle');
+    const subtitle = this.levelPanel?.getData('subtitle');
     if (subtitle) {
       const survivalRate = Math.round(completionData.survival_rate * 100);
       subtitle.setText(`${completionData.survivors}/${completionData.total_started} birds survived (${survivalRate}%)`);
     }
     
     // Update population counts (survivors only)
-    const maleCount = this.levelPanel.getData('maleCount');
-    const femaleCount = this.levelPanel.getData('femaleCount');
+    const maleCount = this.levelPanel?.getData('maleCount');
+    const femaleCount = this.levelPanel?.getData('femaleCount');
     if (maleCount && femaleCount) {
       // Estimate gender split of survivors (roughly 50/50)
       const maleSurvivors = Math.floor(completionData.survivors / 2);
@@ -1227,10 +1080,10 @@ Other:
     // Update button text and style for completion
     // The button is stored when we create the level panel
     // Let's recreate the button section to be sure
-    this.updateButtonForCompletion();
+    // Button update method removed - using path drawing system
     
     // Show the panel
-    this.levelPanel.setVisible(true);
+    this.levelPanel?.setVisible(true);
   }
 
   public showFailurePanel(failureData: any) {
@@ -1245,21 +1098,21 @@ Other:
     }
     
     // Update the panel content for failure
-    const levelTitle = this.levelPanel.getData('levelTitle');
+    const levelTitle = this.levelPanel?.getData('levelTitle');
     if (levelTitle) {
       levelTitle.setText('MIGRATION FAILED');
       levelTitle.setColor('#ff4444'); // Red for failure
     }
     
     // Update subtitle with failure reason
-    const subtitle = this.levelPanel.getData('subtitle');
+    const subtitle = this.levelPanel?.getData('subtitle');
     if (subtitle) {
       subtitle.setText(`${failureData.reason} - ${failureData.losses} birds lost`);
     }
     
     // Update population counts (show losses)
-    const maleCount = this.levelPanel.getData('maleCount');
-    const femaleCount = this.levelPanel.getData('femaleCount');
+    const maleCount = this.levelPanel?.getData('maleCount');
+    const femaleCount = this.levelPanel?.getData('femaleCount');
     if (maleCount && femaleCount) {
       maleCount.setText(`${failureData.losses} Birds Lost`);
       femaleCount.setText(`${failureData.survivors} Survivors`);
@@ -1269,146 +1122,69 @@ Other:
     this.updateButtonForFailure();
     
     // Show the panel
-    this.levelPanel.setVisible(true);
+    this.levelPanel?.setVisible(true);
   }
 
   private updateButtonForFailure() {
     // Find the button and update text to "RETRY LEVEL"
-    for (let child of this.levelPanel.list) {
-      if (child.type === 'Container') {
-        const container = child as Phaser.GameObjects.Container;
-        for (let subChild of container.list) {
-          if (subChild.type === 'Text' && ((subChild as any).text.includes('START') || (subChild as any).text.includes('CONTINUE'))) {
-            // Found the button text - update it
-            (subChild as any).setText('RETRY LEVEL');
-            
-            // Update button background to red for retry
+    if (this.levelPanel?.list) {
+      for (let child of this.levelPanel.list) {
+        if (child.type === 'Container') {
+          const container = child as Phaser.GameObjects.Container;
+          for (let subChild of container.list) {
+            if (subChild.type === 'Text' && ((subChild as any).text.includes('START') || (subChild as any).text.includes('CONTINUE'))) {
+              // Found the button text - update it
+              (subChild as any).setText('RETRY LEVEL');
+
+                          // Update button background to red for retry
             const buttonBg = container.list[0];
-            if (buttonBg.type === 'Graphics') {
-              const graphics = buttonBg as Phaser.GameObjects.Graphics;
-              graphics.clear();
-              graphics.fillStyle(0xaa4444, 0.8);
-              graphics.lineStyle(2, 0xcc6666, 1.0);
-              graphics.fillRoundedRect(-100, -25, 200, 50, 10);
-              graphics.strokeRoundedRect(-100, -25, 200, 50, 10);
-            }
-            return;
+            if (buttonBg && buttonBg.type === 'Graphics') {
+                const graphics = buttonBg as Phaser.GameObjects.Graphics;
+                graphics.clear();
+                graphics.fillStyle(0xaa4444, 0.8);
+                graphics.lineStyle(2, 0xcc6666, 1.0);
+                graphics.fillRoundedRect(-100, -25, 200, 50, 10);
+                graphics.strokeRoundedRect(-100, -25, 200, 50, 10);
+              }
+              return;
           }
         }
       }
     }
   }
 
-  private updateButtonForCompletion() {
-    // Find the start button container by looking for a container with the text element
-    for (let child of this.levelPanel.list) {
-      if (child.type === 'Container') {
-        const container = child as Phaser.GameObjects.Container;
-        for (let subChild of container.list) {
-          if (subChild.type === 'Text' && (subChild as any).text.includes('START')) {
-            // Found the button text - update it
-            (subChild as any).setText('CONTINUE TO NEXT LEG');
-            
-            // Also update the button background (should be first element in container)
-            const buttonBg = container.list[0];
-            if (buttonBg.type === 'Graphics') {
-              const graphics = buttonBg as Phaser.GameObjects.Graphics;
-              graphics.clear();
-              graphics.fillStyle(0x4444aa, 0.8);
-              graphics.lineStyle(2, 0x6666cc, 1.0);
-              graphics.fillRoundedRect(-80, -20, 160, 40, 8);
-              graphics.strokeRoundedRect(-80, -20, 160, 40, 8);
-            }
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  public showMigrationResultsPanel(data: any) {
-    console.log('🌟 UIScene.showMigrationResultsPanel called:', data);
+  
+  
     
-    // Create migration results panel similar to completion panel
-    if (!this.levelPanel) {
-      this.createLevelPanel();
-    }
-    
-    // Mark this as a special results panel
-    this.isCompletionPanel = true;
-    
-    // Update the panel content for migration results
-    const levelTitle = this.levelPanel.getData('levelTitle');
-    if (levelTitle) {
-      levelTitle.setText(`MIGRATION ${data.current_migration - 1} COMPLETE!`);
-      levelTitle.setColor('#44ff88'); // Green for success
-    }
-    
-    // Update subtitle with advancement info
-    const subtitle = this.levelPanel.getData('subtitle');
-    if (subtitle) {
-      subtitle.setText(`${data.survivors} birds survived the journey!\nAdvancing to Migration ${data.current_migration}`);
-    }
-    
-    // Update population counts (survivors for next migration)
-    const maleCount = this.levelPanel.getData('maleCount');
-    const femaleCount = this.levelPanel.getData('femaleCount');
-    if (maleCount && femaleCount) {
-      const males = Math.floor(data.survivors / 2);
-      const females = data.survivors - males;
-      maleCount.setText(`♂ ${males}`);
-      femaleCount.setText(`♀ ${females}`);
-    }
-    
-    // Update button to continue to next migration
-    const startButton = this.levelPanel.getData('startButton');
-    if (startButton) {
-      const buttonText = startButton.getData('buttonText');
-      if (buttonText) {
-        buttonText.setText('START NEXT MIGRATION');
-      }
-    }
-    
-    // Show the panel
-    this.levelPanel.setVisible(true);
-    this.levelPanel.setAlpha(0);
-    
-    // Animate in
-    this.tweens.add({
-      targets: this.levelPanel,
-      alpha: 1,
-      duration: 300,
-      ease: 'Power2'
-    });
-  }
+// Orphaned code removed - migration results handled elsewhere
 
   public showCampaignCompletePanel(data: any) {
     console.log('🎉 UIScene.showCampaignCompletePanel called:', data);
-    
+
     // Create campaign completion panel
     if (!this.levelPanel) {
       this.createLevelPanel();
     }
-    
+
     // Mark this as a special completion panel
     this.isCompletionPanel = true;
     
     // Update the panel content for campaign completion
-    const levelTitle = this.levelPanel.getData('levelTitle');
+    const levelTitle = this.levelPanel?.getData('levelTitle');
     if (levelTitle) {
       levelTitle.setText('CAMPAIGN COMPLETE!');
       levelTitle.setColor('#ffdd44'); // Gold for ultimate success
     }
-    
+
     // Update subtitle with final achievement
-    const subtitle = this.levelPanel.getData('subtitle');
+    const subtitle = this.levelPanel?.getData('subtitle');
     if (subtitle) {
       subtitle.setText(`All migration routes mastered!\n${data.final_survivors} birds reached final destination\nGeneration ${data.final_generation} achieved!`);
     }
-    
+
     // Update population display
-    const maleCount = this.levelPanel.getData('maleCount');
-    const femaleCount = this.levelPanel.getData('femaleCount');
+    const maleCount = this.levelPanel?.getData('maleCount');
+    const femaleCount = this.levelPanel?.getData('femaleCount');
     if (maleCount && femaleCount) {
       const males = Math.floor(data.final_survivors / 2);
       const females = data.final_survivors - males;
@@ -1417,18 +1193,18 @@ Other:
     }
     
     // Update button for new campaign or main menu
-    const startButton = this.levelPanel.getData('startButton');
+    const startButton = this.levelPanel?.getData('startButton');
     if (startButton) {
       const buttonText = startButton.getData('buttonText');
       if (buttonText) {
         buttonText.setText('NEW CAMPAIGN');
       }
     }
-    
+
     // Show the panel
-    this.levelPanel.setVisible(true);
-    this.levelPanel.setAlpha(0);
-    
+    this.levelPanel?.setVisible(true);
+    this.levelPanel?.setAlpha(0);
+
     // Animate in with celebration
     this.tweens.add({
       targets: this.levelPanel,

@@ -22,8 +22,8 @@ class MurmurationGame {
     this.uiScene = new UIScene();
     
     // Calculate optimal dimensions for current screen
-    const dimensions = this.calculateGameDimensions();
-    
+    this.calculateGameDimensions(); // Call but don't store result
+
     const gameConfig: Types.Core.GameConfig = {
       type: Phaser.AUTO,
       width: 1280,
@@ -114,7 +114,7 @@ class MurmurationGame {
       if (resizeTimeout) {
         clearTimeout(resizeTimeout);
       }
-      resizeTimeout = setTimeout(handleResize, 150);
+      resizeTimeout = window.setTimeout(handleResize, 150);
     });
   }
 
@@ -185,14 +185,14 @@ class MurmurationGame {
     });
 
     // Handle beacon placement - now coordinated through UIScene
-    this.uiScene.events.on('beaconSelected', (data: { type: string }) => {
+    this.uiScene.events.on('beaconSelected', (_data: { type: string }) => {
       // Update GameScene's selected beacon type
-      this.gameScene.setSelectedBeaconType(data.type);
+      // Beacon selection removed - using path-based system
     });
 
     this.uiScene.events.on('beaconCleared', () => {
       // Clear GameScene's beacon selection
-      this.gameScene.setSelectedBeaconType(null);
+      // Beacon clearing removed - using path-based system
     });
 
     // Handle level panel events
