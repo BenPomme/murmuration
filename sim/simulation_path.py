@@ -192,9 +192,8 @@ class PathSimulation:
             # Calculate stress from various sources
             self._update_stress(agent, dt)
             
-            # Only leaders follow the path strongly
-            if self.is_leader.get(agent.id, False):
-                self._follow_path(agent, dt)
+            # All birds follow the path (leaders strongly, followers weakly)
+            self._follow_path(agent, dt)
             
             # All birds use flocking (leaders and followers)
             self._apply_flocking(agent, dt)
@@ -219,9 +218,10 @@ class PathSimulation:
                     to_dest = np.array([dest_x - agent.position[0], dest_y - agent.position[1]])
                     agent.velocity = (to_dest / (np.linalg.norm(to_dest) + 0.01)) * min_speed
             
-            # Enforce maximum speed for all birds
-            if speed > max_speed:
-                agent.velocity = (agent.velocity / speed) * max_speed
+            # Cap maximum speed to prevent 10x flyaway
+            MAX_SPEED = 100.0  # Hard cap to prevent crazy speeds
+            if speed > MAX_SPEED:
+                agent.velocity = (agent.velocity / (speed + 0.001)) * MAX_SPEED
             
             # World boundaries
             agent.position[0] = np.clip(agent.position[0], 0, 2000)
@@ -260,7 +260,7 @@ class PathSimulation:
             
             alive_birds.append(agent)
         
-        # Check victory conditions
+        # Check victory conditions - let level end naturally
         if len(alive_birds) == 0:
             if self.arrivals > 0:
                 self.victory = True
@@ -269,10 +269,7 @@ class PathSimulation:
             else:
                 self.game_over = True
                 logger.info("FAILURE! All birds lost")
-        elif self.arrivals >= len(self.agents) * 0.5:  # 50% arrival = victory
-            self.victory = True
-            self.game_over = True
-            logger.info(f"VICTORY! {self.arrivals} birds arrived")
+        # Removed 50% early win - let all birds complete their journey
         
         return self.get_state()
     
@@ -399,6 +396,9 @@ class PathSimulation:
         dist = np.linalg.norm(to_target)
         
         if dist > 0:
+            # Path following weight: leaders=1.0, followers=0.4
+            path_weight = 1.0 if self.is_leader.get(agent.id, False) else 0.4
+            
             # Strong attraction to path
             desired_velocity = (to_target / dist) * 150.0  # High desired speed
             steering = desired_velocity - agent.velocity
@@ -406,7 +406,7 @@ class PathSimulation:
             max_force = 300.0 if self.is_leader.get(agent.id, False) else 200.0
             if np.linalg.norm(steering) > max_force:
                 steering = (steering / np.linalg.norm(steering)) * max_force
-            agent.velocity += steering * dt * path_strength  # Variable strength
+            agent.velocity += steering * dt * path_strength * path_weight  # Apply weight
             
             # Prevent complete stops - maintain momentum
             speed = np.linalg.norm(agent.velocity)
