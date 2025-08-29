@@ -199,4 +199,12 @@ export class WebSocketClient {
       type: 'continue_migration'
     });
   }
+
+  public sendPath(path: Array<{x: number, y: number}>): void {
+    console.log('🛤️ Sending migration path to server:', path);
+    this.send({
+      type: 'set_path',
+      path: path
+    });
+  }
 }

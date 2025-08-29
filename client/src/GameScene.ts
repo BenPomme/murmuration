@@ -2,6 +2,7 @@ import { Scene } from 'phaser';
 import { audioManager } from './AudioManager';
 import { LAYER_DEPTHS } from './config/gameConfig';
 import { BirdAnimationSystem } from './BirdAnimationSystem';
+import { WebSocketClient } from './WebSocketClient';
 
 // Object Pool class for efficient memory management
 class ObjectPool<T extends Phaser.GameObjects.GameObject & { setVisible(visible: boolean): T; setActive(active: boolean): T }> {
@@ -253,6 +254,10 @@ export class GameScene extends Scene {
   private worldWidth = 2000;
   private worldHeight = 1200;
   
+  // In class properties
+  private wsClient: WebSocketClient | null = null; // Will be set from main.ts
+  // private pathLocked: boolean = false; // Removed - not used yet
+  
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -329,9 +334,12 @@ export class GameScene extends Scene {
     // Set world bounds
     this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
     
-    // Set initial zoom for better visibility
-    this.cameras.main.setZoom(0.8);
-    this.cameras.main.centerOn(1000, 600); // Center on middle of world
+    // Set initial zoom to show entire map
+    const zoomX = this.scale.width / this.worldWidth;
+    const zoomY = this.scale.height / this.worldHeight;
+    const optimalZoom = Math.min(zoomX, zoomY) * 0.9; // 90% to add padding
+    this.cameras.main.setZoom(optimalZoom);
+    this.cameras.main.centerOn(this.worldWidth / 2, this.worldHeight / 2); // Center on middle of world
     
     // Create enhanced background with layers
     this.createBackground();
@@ -339,14 +347,7 @@ export class GameScene extends Scene {
     // Initialize bird animation system
     this.birdAnimationSystem = new BirdAnimationSystem(this);
     
-    // DEBUG: Add a test bird at center of view to check visibility
-    const testBird = this.add.graphics();
-    testBird.lineStyle(4, 0xFF0000, 1);
-    testBird.fillStyle(0xFFFF00, 1);
-    testBird.fillCircle(1000, 600, 20); // Center of camera view
-    testBird.strokeCircle(1000, 600, 20);
-    testBird.setDepth(100);
-    console.log('🔴 DEBUG: Added yellow test bird at 1000, 600');
+    // Debug bird removed - no longer needed
     
     // Create enhanced UI elements - DISABLED: Now handled by UIScene
     // this.createInfoPanel();
@@ -675,7 +676,8 @@ export class GameScene extends Scene {
   public updateGameState(newState: GameState) {
     console.log('🎮 GameScene received state update:', {
       agents: newState.agents?.length || 0,
-      // beacons removed from system
+      aliveAgents: newState.agents?.filter(a => a.alive).length || 0,
+      firstAgent: newState.agents?.[0] ? {x: newState.agents[0].x, y: newState.agents[0].y} : null,
       hazards: newState.hazards?.length || 0,
       food_sites: newState.food_sites?.length || 0
     });
@@ -1210,6 +1212,9 @@ export class GameScene extends Scene {
 
     // Notify UIScene to show planning panel
     this.scene.get('UIScene')?.events.emit('showPlanningPhase');
+
+    // In startPlanningPhase
+    this.wsClient?.pauseGame();
   }
 
   public endPlanningPhase() {
@@ -1229,6 +1234,10 @@ export class GameScene extends Scene {
 
     // Notify UIScene to hide planning panel
     this.scene.get('UIScene')?.events.emit('hidePlanningPhase');
+
+    // In endPlanningPhase
+    this.wsClient?.resumeGame();
+    // this.pathLocked = true; // Will be used when we implement path locking
   }
 
   private sendPathToServer() {
@@ -1345,6 +1354,36 @@ export class GameScene extends Scene {
     dayNightOverlay.fillStyle(0x000033, 0);
     dayNightOverlay.fillRect(0, 0, this.worldWidth, this.worldHeight);
     dayNightOverlay.setDepth(-11);
+    
+    // Draw visible start zone (middle-left)
+    const startZoneGraphics = this.add.graphics();
+    startZoneGraphics.lineStyle(3, 0x00ff00, 0.8);
+    startZoneGraphics.fillStyle(0x00ff00, 0.1);
+    startZoneGraphics.fillCircle(150, 600, 80); // Match server coordinates
+    startZoneGraphics.strokeCircle(150, 600, 80);
+    startZoneGraphics.setDepth(-5);
+    
+    // Add "START" label
+    this.add.text(150, 600, 'START', {
+      fontSize: '16px',
+      color: '#00ff00',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(-5);
+    
+    // Draw destination zone (middle-right)
+    const destZoneGraphics = this.add.graphics();
+    destZoneGraphics.lineStyle(3, 0xff0000, 0.8);
+    destZoneGraphics.fillStyle(0xff0000, 0.1);
+    destZoneGraphics.fillCircle(1850, 600, 100); // Match server coordinates
+    destZoneGraphics.strokeCircle(1850, 600, 100);
+    destZoneGraphics.setDepth(-5);
+    
+    // Add "DESTINATION" label
+    this.add.text(1850, 600, 'DEST', {
+      fontSize: '16px',
+      color: '#ff0000',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(-5);
     
     // Animate day-night cycle
     this.tweens.add({
@@ -1984,5 +2023,9 @@ export class GameScene extends Scene {
     
     // Refresh the panel with updated data
     this.showBirdInspection(inspectedBird);
+  }
+
+  public setWebSocketClient(client: WebSocketClient) {
+    this.wsClient = client;
   }
 }

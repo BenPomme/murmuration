@@ -24,6 +24,7 @@ from dataclasses import asdict
 from .simulation_evolved import EvolvedSimulation, GameConfig, Breed
 from .simulation_genetic import GeneticSimulation
 from .simulation_unified import UnifiedSimulation  # NEW: Unified simulation
+from .simulation_path import PathSimulation, PathSimConfig  # CLEAN: Path-only simulation
 from .migration_system import MigrationManager, MigrationStatus
 from .scoring import SimulationResult
 from .core.agent import Agent
@@ -47,6 +48,7 @@ class SimulationServer:
         self.simulation: Optional[EvolvedSimulation] = None
         self.genetic_sim: Optional[GeneticSimulation] = None  # For genetic mode
         self.unified_sim: Optional[UnifiedSimulation] = None  # NEW: For unified mode
+        self.path_sim: Optional[PathSimulation] = None  # CLEAN: Path-only mode
         self.clients: List[ServerConnection] = []
         self.running = False
         self.speed = 1.0
@@ -76,8 +78,16 @@ class SimulationServer:
         
     async def send_state(self, websocket: ServerConnection) -> None:
         """Send current simulation state to client."""
-        # PHASE 2: Prioritize our enhanced simulation, then genetic, then unified as fallback
-        if self.simulation:
+        # Prioritize path simulation for clean path-following
+        if self.path_sim:
+            state = self.path_sim.get_state()
+            message = {
+                "type": "state_update",
+                "data": state
+            }
+            await websocket.send(json.dumps(message))
+            return
+        elif self.simulation:
             # Check if the simulation has already ended - if so, reset for new client
             if self.simulation.game_over:
                 logger.info("Existing simulation already ended - starting fresh for new client")
@@ -92,8 +102,12 @@ class SimulationServer:
             await self.send_unified_state(websocket)
             return
             
-        # No simulation running - auto-start Phase 2 simulation
-        await self.load_level("W1-1")
+        # No simulation running - don't auto-start, wait for client to decide
+        # Send empty state to indicate no game is running
+        await websocket.send(json.dumps({
+            "type": "state_update", 
+            "data": {"no_simulation": True}
+        }))
         return
     
     async def send_evolved_state(self, websocket: ServerConnection) -> None:
@@ -218,6 +232,16 @@ class SimulationServer:
                 self.speed = data.get("speed", 1.0)
                 self.paused = (self.speed == 0)
                 
+            elif msg_type == "pause":
+                self.paused = True
+                self.speed = 0
+                logger.info("Game paused")
+                
+            elif msg_type == "resume":
+                self.paused = False
+                self.speed = 1.0
+                logger.info("Game resumed")
+                
             elif msg_type == "toggle_overlay":
                 # Handle overlay toggle
                 pass
@@ -232,23 +256,42 @@ class SimulationServer:
                 await self.start_genetic_simulation(data.get("level", "W1-1"))
                 
             elif msg_type == "start_unified":
-                # PHASE 2: Redirect to our evolved migration system
-                migration_id = data.get("migration_id", "spring_coastal") 
-                if isinstance(migration_id, int):
-                    # Convert legacy numeric ID to journey string
-                    journey_map = {1: "spring_coastal", 2: "fall_mountain", 3: "summer_desert", 4: "winter_arctic"}
-                    migration_id = journey_map.get(migration_id, "spring_coastal")
+                # Use the CLEAN path-following simulation
+                logger.info("Starting path-based simulation")
                 
-                # Start migration journey with Phase 2 system
-                success = self.migration_manager.start_journey(migration_id, population=100)
-                if success:
-                    current_leg = self.migration_manager.get_current_leg()
-                    if current_leg:
-                        # Load the first leg as a level
-                        await self.load_level(current_leg.level_template)
-                    logger.info("Phase 2 migration journey started", journey_id=migration_id)
-                else:
-                    logger.error("Failed to start migration journey", journey_id=migration_id)
+                # Stop any existing simulations completely
+                self.simulation = None
+                self.genetic_sim = None
+                self.unified_sim = None
+                self.path_sim = None  # Clear any old path sim
+                self.running = False
+                self.paused = True
+                
+                # Create path simulation
+                config = PathSimConfig(
+                    n_agents=100,
+                    seed=np.random.randint(0, 100000),
+                    current_leg=1,
+                    total_legs=4,
+                    leg_name="Migration Leg 1"
+                )
+                
+                self.path_sim = PathSimulation(config)
+                self.running = True
+                self.paused = True  # Start paused so player can draw path
+                
+                # Send level loaded message
+                await self.broadcast_message({
+                    'type': 'level_loaded',
+                    'level': f"Migration-Leg{config.current_leg}",
+                    'current_leg': config.current_leg,
+                    'total_legs': config.total_legs,
+                    'males': 50,
+                    'females': 50,
+                    'leg_name': config.leg_name
+                })
+                
+                logger.info("Path simulation started successfully")
                 
             elif msg_type == "breed":
                 await self.breed_population()
@@ -261,7 +304,23 @@ class SimulationServer:
                 
             elif msg_type == "continue_migration":
                 logger.info("🔄 Continue migration message received")
-                await self.continue_migration()
+                if self.path_sim:
+                    # Continue to next leg in path simulation
+                    if self.path_sim.continue_to_next_leg():
+                        await self.broadcast_message({
+                            'type': 'migration_continued',
+                            'data': {
+                                'current_leg': self.path_sim.config.current_leg,
+                                'total_legs': self.path_sim.config.total_legs,
+                                'level_name': self.path_sim.config.leg_name,
+                                'survivors': len([a for a in self.path_sim.agents if a.alive])
+                            }
+                        })
+                        logger.info(f"Path simulation continued to leg {self.path_sim.config.current_leg}")
+                    else:
+                        logger.info("Migration complete!")
+                else:
+                    await self.continue_migration()
                 
             elif msg_type == "start_journey":
                 await self.start_journey(data.get("journey_id", "spring_coastal"))
@@ -283,6 +342,26 @@ class SimulationServer:
                 
             elif msg_type == "get_migration_results":
                 await self.send_migration_results(websocket)
+                
+            elif msg_type == "set_path":
+                logger.info("Received path from client")
+                # Set path on path simulation
+                if self.path_sim:
+                    self.path_sim.set_path(data['path'])  # List of {x, y} dicts
+                    # Unpause the simulation now that we have a path
+                    self.paused = False
+                    self.running = True
+                    logger.info("Path set on path simulation, game unpaused")
+                elif self.unified_sim:
+                    self.unified_sim.migration_path = data['path']  # Backup
+                    self.paused = False
+                    self.running = True
+                else:
+                    logger.warning("No path-supporting simulation active")
+                await websocket.send(json.dumps({
+                    'type': 'path_set',
+                    'success': True
+                }))
                 
             else:
                 logger.warning("Unknown message type", type=msg_type)
@@ -761,8 +840,50 @@ class SimulationServer:
         frame_time = 1.0 / target_fps
         
         while True:  # Run forever
-            # PHASE 2: Handle Phase 2 evolved simulation first (priority)
-            if self.simulation and not self.paused and self.running:
+            # Path simulation has highest priority
+            if self.path_sim and not self.paused and self.running:
+                # Step the path simulation
+                state = self.path_sim.step()
+                
+                # Check for level completion
+                if self.path_sim.game_over:
+                    self.running = False
+                    self.paused = True
+                    
+                    if self.path_sim.victory:
+                        # Send completion message
+                        await self.broadcast_message({
+                            "type": "level_completed",
+                            "data": {
+                                "survivors": self.path_sim.arrivals,
+                                "total_started": len(self.path_sim.agents),
+                                "survival_rate": self.path_sim.arrivals / len(self.path_sim.agents),
+                                "losses": self.path_sim.losses,
+                                "current_leg": self.path_sim.config.current_leg,
+                                "total_legs": self.path_sim.config.total_legs
+                            }
+                        })
+                        logger.info(f"Path simulation leg {self.path_sim.config.current_leg} complete!")
+                    else:
+                        # Send failure message
+                        await self.broadcast_message({
+                            "type": "level_failed",
+                            "data": {
+                                "reason": "All birds lost",
+                                "survivors": 0,
+                                "losses": self.path_sim.losses,
+                                "current_leg": self.path_sim.config.current_leg
+                            }
+                        })
+                        logger.info("Path simulation failed - all birds lost")
+                
+                # Broadcast state
+                await self.broadcast_message({
+                    "type": "state_update",
+                    "data": state
+                })
+                
+            elif self.simulation and not self.paused and self.running:
                 # CRITICAL FIX: Actually run the simulation step and cache the state
                 self.last_state = self.simulation.step()
                 

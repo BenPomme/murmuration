@@ -121,13 +121,24 @@ export class BirdAnimationSystem {
     glow.setBlendMode(Phaser.BlendModes.ADD);
     container.add(glow);
     
-    // Create simple circle for bird instead of sprite for now
+    // Create simple circle for bird with visible colors
     const birdGraphics = this.scene.add.graphics();
     birdGraphics.lineStyle(2, 0x000000, 1);
-    birdGraphics.fillStyle(0xFFFFFF, 1);
-    birdGraphics.fillCircle(0, 0, 10);
-    birdGraphics.strokeCircle(0, 0, 10);
+    // Use gender-based colors: blue for male, pink for female
+    const color = birdData.gender === 'male' ? 0x0066CC : 0xFF66CC;
+    birdGraphics.fillStyle(color, 1);
+    birdGraphics.fillCircle(0, 0, 8);
+    birdGraphics.strokeCircle(0, 0, 8);
     container.add(birdGraphics);
+    
+    // Add leader crown if leader
+    if (birdData.is_leader) {
+      const crown = this.scene.add.graphics();
+      crown.lineStyle(1, 0xFFD700, 1);
+      crown.fillStyle(0xFFD700, 1);
+      crown.fillTriangle(-4, -8, 0, -12, 4, -8);
+      container.add(crown);
+    }
     
     // Store graphics as sprite for now
     const sprite = birdGraphics as any;

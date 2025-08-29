@@ -425,17 +425,21 @@ export class UIScene extends Phaser.Scene {
       panel.add(text);
     });
 
-    // Start Migration Button
+    // Start Migration Button - properly centered
     const buttonWidth = 150;
     const buttonHeight = 40;
+    const buttonY = panelHeight/2 - buttonHeight - 15; // Button position relative to panel center
+    
+    // Button background
     const buttonBg = this.add.graphics();
     buttonBg.fillStyle(0x00aa44, 0.8);
     buttonBg.lineStyle(2, 0x44ff88, 0.9);
-    buttonBg.fillRoundedRect(-buttonWidth/2, panelHeight/2 - buttonHeight - 15, buttonWidth, buttonHeight, 8);
-    buttonBg.strokeRoundedRect(-buttonWidth/2, panelHeight/2 - buttonHeight - 15, buttonWidth, buttonHeight, 8);
+    buttonBg.fillRoundedRect(-buttonWidth/2, buttonY, buttonWidth, buttonHeight, 8);
+    buttonBg.strokeRoundedRect(-buttonWidth/2, buttonY, buttonWidth, buttonHeight, 8);
     panel.add(buttonBg);
 
-    const buttonText = this.createCrispText(0, panelHeight/2 - buttonHeight/2 - 15, 'START MIGRATION', {
+    // Button text - centered in button
+    const buttonText = this.createCrispText(0, buttonY + buttonHeight/2, 'START MIGRATION', {
       fontSize: '14px',
       color: '#ffffff',
       fontStyle: 'bold'
@@ -443,10 +447,10 @@ export class UIScene extends Phaser.Scene {
     buttonText.setOrigin(0.5, 0.5);
     panel.add(buttonText);
 
-    // Make button interactive
-    const buttonContainer = this.add.container(0, panelHeight/2 - buttonHeight/2 - 15);
+    // Make button interactive with correct bounds
+    const buttonContainer = this.add.container(0, buttonY + buttonHeight/2);
     buttonContainer.setSize(buttonWidth, buttonHeight);
-    buttonContainer.setInteractive({ useHandCursor: true });
+    buttonContainer.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Rectangle(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight), hitAreaCallback: Phaser.Geom.Rectangle.Contains });
 
     buttonContainer.on('pointerover', () => {
       buttonBg.clear();
@@ -1080,9 +1084,17 @@ Other:
     }
     
     // Update button text and style for completion
-    // The button is stored when we create the level panel
-    // Let's recreate the button section to be sure
-    // Button update method removed - using path drawing system
+    const startButton = this.levelPanel?.getData('startButton');
+    if (startButton) {
+      // Find the text element inside the button
+      for (let child of startButton.list) {
+        if (child.type === 'Text') {
+          (child as any).setText('CONTINUE TO NEXT LEG');
+        }
+      }
+      // Store reference to button text for later
+      startButton.setData('buttonText', startButton.list.find((child: any) => child.type === 'Text'));
+    }
     
     // Show the panel
     this.levelPanel?.setVisible(true);
@@ -1153,10 +1165,9 @@ Other:
         }
       }
     }
-    }
   }
 
-  // Orphaned code removed - migration results handled elsewhere
+  }
 
   public showCampaignCompletePanel(data: any) {
     console.log('🎉 UIScene.showCampaignCompletePanel called:', data);
@@ -1212,5 +1223,151 @@ Other:
       duration: 500,
       ease: 'Power2'
     });
+  }
+
+  public showMigrationResultsPanel(data: any) {
+    console.log('📊 UIScene.showMigrationResultsPanel called:', data);
+
+    // Create a new panel for results
+    const panelWidth = 400;
+    const panelHeight = 250;
+    const panel = this.add.container(this.scale.width / 2, this.scale.height / 2);
+
+    // Semi-transparent backdrop
+    const backdrop = this.add.graphics();
+    backdrop.fillStyle(0x000000, 0.7);
+    backdrop.fillRect(-this.scale.width / 2, -this.scale.height / 2, this.scale.width, this.scale.height);
+    panel.add(backdrop);
+
+    // Main panel background
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a1a2e, 0.95);
+    bg.lineStyle(3, 0x44aaff, 1.0);
+    bg.fillRoundedRect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight, 15);
+    bg.strokeRoundedRect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight, 15);
+    panel.add(bg);
+
+    // Title
+    const title = this.createCrispText(0, -100, 'MIGRATION RESULTS', {
+      fontSize: '28px',
+      color: '#44aaff',
+      fontStyle: 'bold'
+    });
+    title.setOrigin(0.5);
+    panel.add(title);
+
+    // Subtitle
+    const subtitle = this.createCrispText(0, -65, `Leg ${data.current_leg}/${data.total_legs} Complete`, {
+      fontSize: '16px',
+      color: '#88ccff',
+    });
+    subtitle.setOrigin(0.5);
+    panel.add(subtitle);
+
+    // Population info
+    const populationInfo = this.add.container(0, -10);
+
+    const popTitle = this.createCrispText(0, -20, 'Your Flock:', {
+      fontSize: '18px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    });
+    popTitle.setOrigin(0.5);
+    populationInfo.add(popTitle);
+
+    const maleCount = this.createCrispText(-80, 10, `${data.survivors} Males Survived`, {
+      fontSize: '16px',
+      color: '#4488ff'
+    });
+    maleCount.setOrigin(0.5);
+    populationInfo.add(maleCount);
+
+    const femaleCount = this.createCrispText(80, 10, `${data.survivors} Females Survived`, {
+      fontSize: '16px',
+      color: '#ff88aa'
+    });
+    femaleCount.setOrigin(0.5);
+    populationInfo.add(femaleCount);
+
+    panel.add(populationInfo);
+
+    // Results summary
+    const resultsText = `
+Migration Route: ${data.route_length} units
+Energy Consumed: ${data.energy_consumed}
+Survival Rate: ${Math.round(data.survival_rate * 100)}%
+Total Birds Lost: ${data.total_lost}
+    `.trim();
+
+    const resultsContent = this.createCrispText(0, 50, resultsText, {
+      fontSize: '12px',
+      color: '#cccccc',
+      lineSpacing: 4
+    });
+    resultsContent.setOrigin(0.5, 0);
+    panel.add(resultsContent);
+
+    // Next button
+    const nextButton = this.add.container(0, 100);
+    const nextButtonBg = this.add.graphics();
+    nextButtonBg.fillStyle(0x44aa44, 0.9);
+    nextButtonBg.lineStyle(3, 0x66cc66, 1.0);
+    nextButtonBg.fillRoundedRect(-100, -25, 200, 50, 10);
+    nextButtonBg.strokeRoundedRect(-100, -25, 200, 50, 10);
+    nextButton.add(nextButtonBg);
+
+    const nextButtonText = this.createCrispText(0, 0, 'CONTINUE MIGRATION', {
+      fontSize: '14px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    });
+    nextButtonText.setOrigin(0.5, 0.5);
+    nextButton.add(nextButtonText);
+
+    // Make button interactive
+    nextButton.setSize(220, 70);
+    nextButton.setInteractive(new Phaser.Geom.Rectangle(-110, -35, 220, 70), Phaser.Geom.Rectangle.Contains);
+    nextButton.on('pointerdown', () => {
+      this.hideMigrationResultsPanel();
+      this.events.emit('continueMigration');
+    });
+
+    // Add hover effect
+    nextButton.on('pointerover', () => {
+      nextButtonBg.clear();
+      nextButtonBg.fillStyle(0x55bb55, 0.9);
+      nextButtonBg.lineStyle(2, 0x77dd77, 1.0);
+      nextButtonBg.fillRoundedRect(-80, -20, 160, 40, 8);
+      nextButtonBg.strokeRoundedRect(-80, -20, 160, 40, 8);
+    });
+
+    nextButton.on('pointerout', () => {
+      nextButtonBg.clear();
+      nextButtonBg.fillStyle(0x44aa44, 0.8);
+      nextButtonBg.lineStyle(2, 0x66cc66, 1.0);
+      nextButtonBg.fillRoundedRect(-80, -20, 160, 40, 8);
+      nextButtonBg.strokeRoundedRect(-80, -20, 160, 40, 8);
+    });
+
+    panel.add(nextButton);
+
+    // Ensure hudContainer exists before adding
+    if (this.hudContainer) {
+      this.hudContainer.add(panel);
+    } else {
+      console.warn('⚠️ hudContainer not initialized for migration results panel');
+      // Add directly to scene if hudContainer not ready
+      this.add.existing(panel);
+    }
+    panel.setVisible(true);
+  }
+
+  public hideMigrationResultsPanel() {
+    if (this.hudContainer) {
+      const panel = this.hudContainer.list.find(p => p.type === 'Container' && p.getData('isMigrationResultsPanel'));
+      if (panel) {
+        this.hudContainer.remove(panel);
+      }
+    }
   }
 }

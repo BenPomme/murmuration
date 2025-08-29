@@ -232,6 +232,9 @@ class UnifiedSimulation:
         self.population_stats = PopulationStats()
         self.family_trees: Dict[AgentID, Dict] = {}
         
+        # Path following system
+        self.migration_path = []  # List of [x, y] waypoints for birds to follow
+        
         # Create initial population with gender balance
         n_agents = config.get('n_agents', 100)
         for i in range(n_agents):
@@ -306,8 +309,9 @@ class UnifiedSimulation:
             position = create_vector2d(food_site['x'], food_site['y'])
             
             # Add to beacon manager as permanent food source
+            # Using WIND_UP as a placeholder for food beacons
             beacon = self.beacon_manager.place_beacon(
-                BeaconType.FOOD_SCENT, 
+                BeaconType.WIND_UP,  # Using wind_up as food beacon placeholder
                 position, 
                 Tick(0)  # Place at start
             )
@@ -351,7 +355,7 @@ class UnifiedSimulation:
             flock_positions.append((bird_id, agent.position[0]))  # X coordinate for eastward migration
             
             # 1. Apply all movement forces
-            self.apply_migration_force(agent, genetics, dt)
+            self.apply_path_following_force(agent, genetics, dt)
             self.apply_flocking_forces(bird, dt) 
             self.apply_beacon_influence(agent, genetics, dt)
             self.apply_hazard_effects(bird, dt)
@@ -556,17 +560,51 @@ class UnifiedSimulation:
         
         return result
     
-    def apply_migration_force(self, agent: Agent, genetics: Genetics, dt: float):
-        """Apply migration instinct toward destination."""
-        dest_x, dest_y, dest_r = self.migration_config.destination_zone
-        to_dest = np.array([dest_x - agent.position[0], dest_y - agent.position[1]])
-        dist = np.linalg.norm(to_dest)
+    def apply_path_following_force(self, agent: Agent, genetics: Genetics, dt: float):
+        """Apply path following force to steer birds toward the next waypoint."""
+        # First, find the next waypoint the bird should head to
+        current_pos = agent.position
+        next_idx = 0
         
-        if dist > dest_r:
-            # Migration strength affected by experience and genetics (reduced for strategic observation)
-            base_strength = 6.0 * (0.7 + genetics.beacon_sensitivity * 0.6)
-            migration_force = (to_dest / dist) * base_strength
-            agent.velocity += migration_force * dt
+        # Skip waypoints we've already passed (within 50 units)
+        for i, wp in enumerate(self.migration_path):
+            wp_pos = np.array(wp)
+            if np.linalg.norm(current_pos - wp_pos) < 50:
+                next_idx = i + 1
+            else:
+                break
+        
+        # Check if we have a valid path and next waypoint
+        if not self.migration_path or next_idx >= len(self.migration_path):
+            # No path or reached end of path - apply wandering and destination attraction
+            wander_force = self.rng.normal(0, 5.0, 2)  # Small random force
+            agent.velocity += wander_force * dt
+            
+            # Check for destination detection
+            dest_x, dest_y, dest_r = self.migration_config.destination_zone
+            to_dest = np.array([dest_x - agent.position[0], dest_y - agent.position[1]])
+            dist_to_dest = np.linalg.norm(to_dest)
+            detection_range = 200.0
+            if dist_to_dest < detection_range:
+                pull_strength = 20.0 * (1 - dist_to_dest / detection_range)  # Progressive: stronger when closer
+                if dist_to_dest > 0:
+                    dest_force = (to_dest / dist_to_dest) * pull_strength
+                    agent.velocity += dest_force * dt
+            return
+        
+        next_wp = np.array(self.migration_path[next_idx])
+        to_wp = next_wp - current_pos
+        dist = np.linalg.norm(to_wp)
+        
+        if dist > 1: # Avoid div0
+            base_strength = 30.0 * (0.8 + genetics.leadership * 0.4)
+            steering_force = (to_wp / dist) * base_strength
+            agent.velocity += steering_force * dt
+            logger.debug(f"Applying path force to bird {agent.id}: strength {base_strength}, dist {dist}")
+            
+            # Add some deviation based on cohesion (lower cohesion = more wander)
+            deviation = self.rng.normal(0, (1 - genetics.flock_cohesion) * 2, 2)
+            agent.velocity += deviation * dt
     
     def apply_flocking_forces(self, bird: BirdEntity, dt: float):
         """Apply advanced flocking with leadership mechanics."""
@@ -655,7 +693,7 @@ class UnifiedSimulation:
         # Food scent attraction and energy restoration
         if contributions["foraging_bias"] > 0:
             for beacon in self.beacon_manager.beacons:
-                if beacon.beacon_type == BeaconType.FOOD_SCENT:
+                if hasattr(beacon, 'environmental') and beacon.environmental:
                     strength = beacon.get_field_strength(agent.position, Tick(self.tick))
                     
                     if strength > 0.1:
@@ -839,6 +877,9 @@ class UnifiedSimulation:
             # Don't reset losses - they carry across legs
             self.game_over = False
             self.victory = False
+            
+            # Clear the path for the new leg
+            self.migration_path = []
             
             # Respawn hazards and food for new leg
             self.spawn_environmental_food()

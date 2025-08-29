@@ -21,6 +21,9 @@ class MurmurationGame {
     this.gameScene = new GameScene();
     this.uiScene = new UIScene();
     
+    // Set WebSocketClient in GameScene
+    this.gameScene.setWebSocketClient(this.wsClient);
+
     // Calculate optimal dimensions for current screen
     this.calculateGameDimensions(); // Call but don't store result
 
@@ -154,10 +157,8 @@ class MurmurationGame {
           this.levelStartRequested = false; // Reset flag
         }
       } else if (data.type === 'level_completed') {
-        console.log('🏆 Level completed:', data.data);
-        // Show completion panel with option to continue to next leg
-        this.uiScene.showCompletionPanel(data.data);
-        this.gameScene.hideBirdInspection();
+        console.log('✅ Migration leg completed:', data.data);
+        this.uiScene.showMigrationResultsPanel(data.data);
       } else if (data.type === 'level_failed') {
         console.log('💀 Level failed:', data.data);
         // Show failure panel with option to retry
@@ -165,6 +166,15 @@ class MurmurationGame {
         this.gameScene.hideBirdInspection();
       } else if (data.type === 'error') {
         console.error('Server error:', data.message);
+      } else if (data.type === 'migration_continued') {
+        console.log('🔄 Migration continued to next leg:', data.data);
+        const survivors = data.data.survivors;
+        const males = Math.floor(survivors / 2);
+        const females = survivors - males;
+        // Show level panel for new leg
+        this.uiScene.showLevelPanel(data.data.current_leg, males, females, data.data.level_name);  // Adjust population based on survivors later
+        // Start planning phase for new leg
+        this.gameScene.startPlanningPhase();
       }
     });
 
@@ -200,8 +210,12 @@ class MurmurationGame {
       console.log('🎮 Level start requested');
       // Set flag to prevent level panel from showing again
       this.levelStartRequested = true;
-      // Resume the game that's already loaded but paused
-      this.wsClient.resumeGame();
+      
+      // Remove this line to keep paused until end of planning
+      // this.wsClient.resumeGame();
+      
+      // NEW: Start planning phase for path drawing
+      this.gameScene.startPlanningPhase();
     });
 
     // Handle continue to next leg events  
@@ -217,6 +231,12 @@ class MurmurationGame {
     this.gameScene.events.on('placeBeacon', (data: { type: string, x: number, y: number }) => {
       console.log('🎮 Main received placeBeacon event:', data);
       this.wsClient.placeBeacon(data.type, data.x, data.y);
+    });
+
+    // Handle path submission from GameScene
+    this.gameScene.events.on('pathSubmitted', (data: { path: Array<{x: number, y: number}> }) => {
+      console.log('🛤️ Main received pathSubmitted event:', data);
+      this.wsClient.sendPath(data.path);
     });
 
     this.gameScene.events.on('togglePause', () => {
@@ -269,6 +289,13 @@ class MurmurationGame {
           this.gameScene.frameAllBirds();
           break;
       }
+    });
+
+    this.uiScene.events.on('continueMigration', () => {
+      console.log('🔄 Continuing to next migration leg');
+      this.wsClient.send({ type: 'continue_migration' });
+      // Start planning for next leg
+      this.gameScene.startPlanningPhase();
     });
   }
 

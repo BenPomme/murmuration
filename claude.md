@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Murmuration is a strategic multi-generational migration game where players guide bird flocks through dangerous journeys using environmental influence, not direct control. Players navigate A→B→C→D→Z migration legs, managing energy, hazards, and genetic evolution across generations.
 
+**📖 For detailed game mechanics and rules, see [GAME_RULES.md](./GAME_RULES.md)**
+
 ## Core Architecture
 
 ### Simulation Engine (`sim/`)
