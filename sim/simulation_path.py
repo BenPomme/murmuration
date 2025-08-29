@@ -525,9 +525,25 @@ class PathSimulation:
         self.victory = False
         self.migration_path = []  # Clear path for new leg
         
-        # Reset birds
+        # Only carry over actual survivors (alive or arrived)
+        survived_ids = set()
         for agent in self.agents:
-            if agent.alive or self.arrivals > 0:  # Revive successful birds
+            # Only carry over birds that actually survived (arrived or still alive)
+            if agent.alive and agent.energy > 0:
+                survived_ids.add(agent.id)
+        
+        # Add arrived birds to survivors
+        if self.arrivals > 0:
+            # Find birds that made it to destination
+            for agent in self.agents:
+                dest_x, dest_y, dest_radius = self.config.destination_zone
+                dist_to_dest = np.linalg.norm(agent.position - np.array([dest_x, dest_y]))
+                if dist_to_dest < dest_radius:
+                    survived_ids.add(agent.id)
+        
+        # Reset only survivors for next leg
+        for agent in self.agents:
+            if agent.id in survived_ids:
                 # Reset position to start zone
                 start_x, start_y, start_radius = self.config.start_zone
                 angle = self.rng.uniform(0, 2 * np.pi)
@@ -537,7 +553,7 @@ class PathSimulation:
                     start_y + radius * np.sin(angle)
                 ], dtype=np.float32)
                 
-                # Reset state
+                # Reset state for survivors
                 agent.alive = True
                 agent.energy = 100.0
                 agent.stress = 0.0
@@ -548,6 +564,9 @@ class PathSimulation:
                 
                 self.path_progress[agent.id] = 0
                 # Gender and leader status are preserved
+            else:
+                # Dead birds stay dead
+                agent.alive = False
         
         logger.info(f"Advanced to leg {self.config.current_leg}/{self.config.total_legs}")
         return True
