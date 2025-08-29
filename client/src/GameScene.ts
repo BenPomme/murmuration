@@ -751,7 +751,7 @@ export class GameScene extends Scene {
         gender: agent.gender
       });
       
-      // Mark as tracked
+      // Mark as tracked - just use a flag since BirdAnimationSystem manages the actual sprites
       this.agentSprites.set(agentId, true as any);
     }
     

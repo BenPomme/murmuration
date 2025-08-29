@@ -170,8 +170,8 @@ export class BirdAnimationSystem {
       dustEmitter
     };
     
-    // Vary animation start time for more natural look
-    sprite.anims.setProgress(Math.random());
+    // Skip animation for graphics (was for sprites)
+    // sprite.anims.setProgress(Math.random());
     
     this.birds.set(birdData.id, bird);
     return bird;
